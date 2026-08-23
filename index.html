@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>手机端个人专属工作台</title>
+<style>
+  :root{
+    --bg:#f4f3f7; --panel:#ffffff; --ink:#3a3a44; --muted:#8d8a99;
+    --line:#ece9f3; --purple:#b9aedc; --purple-soft:#efeaf8; --purple-deep:#8b7fc7;
+    --accent:#a99bdc; --accent-soft:#f3f0fa; --danger:#d96a6a; --ok:#5fa07c;
+    --shadow:0 6px 20px rgba(120,110,160,.10);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex; min-height:100vh; max-width:560px; margin:0 auto; background:var(--bg);}
+  /* left rail */
+  .rail{
+    width:74px; flex:0 0 74px; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; padding:14px 0; gap:6px;
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+  }
+  .rail .logo{font-size:20px; margin-bottom:8px;}
+  .rail .brand{
+    width:62px; display:flex; flex-direction:column; align-items:center; gap:2px;
+    color:var(--purple-deep); margin-bottom:6px; padding:6px 0 10px;
+    border-bottom:1px solid var(--line);
+  }
+  .rail .brand::before{content:'◆'; font-size:18px; line-height:1; color:var(--purple);}
+  .rail .brand span{font-size:9.5px; font-weight:700; letter-spacing:.3px; text-align:center; line-height:1.2;}
+  .recent-row{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line);}
+  .recent-row:last-child{border-bottom:0;}
+  .recent-row .rr-left{font-size:13px; min-width:0;}
+  .recent-row .rr-amt{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; margin-left:10px;}
+  .recent-row .rr-amt.in{color:var(--ok);}
+  .recent-row .rr-amt.out{color:var(--danger);}
+  .recent-row .rr-sub{font-size:11px; color:var(--muted); margin-top:2px;}
+  .ov-debt{background:linear-gradient(135deg,#f3eafa,#ece4f6); border-radius:14px; padding:12px 14px; margin-top:12px; display:flex; justify-content:space-between; align-items:center;}
+  .ov-debt .v{font-size:17px; font-weight:700; color:var(--danger); font-variant-numeric:tabular-nums;}
+  .ov-debt .lb{font-size:11px; color:var(--purple-deep);}
+  .stat-grid-2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .debt-paid{background:#f5f0fa; border-radius:14px; padding:12px 14px; margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;}
+  .debt-paid .pi{display:flex; flex-direction:column; gap:4px;}
+  .debt-paid .pi .lb{font-size:11px; color:var(--purple-deep);}
+  .debt-paid .pi .vv{font-size:15px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;}
+  .debt-paid .pi .vv.in{color:var(--ok);}
+  .debt-paid .pi .vv.out{color:var(--danger);}
+  .debt-paid .pi input{font-size:13px; padding:7px 10px; border-radius:9px;}
+  .debt-paid .pi .manual-hint{font-size:10px; color:var(--muted);}
+  .nav-btn{
+    width:62px; padding:9px 2px; border:none; background:transparent; border-radius:14px;
+    color:var(--muted); display:flex; flex-direction:column; align-items:center; gap:3px;
+    font-size:10px; cursor:pointer; transition:.18s;
+  }
+  .nav-btn .ic{font-size:19px; line-height:1;}
+  .nav-btn.active{background:var(--purple-soft); color:var(--purple-deep); font-weight:600;}
+  .nav-btn:active{transform:scale(.95);}
+  /* content */
+  .content{flex:1; min-width:0; display:flex; flex-direction:column; height:100vh;}
+  header.top{
+    position:sticky; top:0; z-index:5; background:rgba(244,243,247,.92); backdrop-filter:blur(8px);
+    padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line);
+  }
+  header.top h1{font-size:16px; margin:0; font-weight:700; letter-spacing:.5px;}
+  header.top .savebox{display:flex; align-items:center; gap:8px;}
+  .save-status{font-size:11px; color:var(--ok);}
+  .save-status.pending{color:var(--muted);}
+  .btn-save{
+    border:none; background:var(--purple-deep); color:#fff; font-size:12px; font-weight:600;
+    padding:7px 13px; border-radius:11px; cursor:pointer; box-shadow:var(--shadow);
+  }
+  .btn-save:active{transform:scale(.96);}
+  .scroll{flex:1; overflow-y:auto; padding:14px 14px 40px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:15px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:7px; color:var(--ink);}
+  .card h2 .tag{font-size:10px; font-weight:500; color:var(--purple-deep); background:var(--purple-soft); padding:2px 8px; border-radius:20px;}
+  .muted{color:var(--muted); font-size:12px;}
+  .row{display:flex; gap:9px;}
+  .row > *{flex:1; min-width:0;}
+  label.fld{display:block; margin-bottom:10px;}
+  label.fld .lb{display:block; font-size:11px; color:var(--muted); margin-bottom:5px;}
+  input,select,textarea{
+    width:100%; border:1px solid var(--line); background:#fbfaff; border-radius:11px;
+    padding:10px 11px; font-size:14px; color:var(--ink); font-family:inherit; outline:none; transition:.15s;
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--purple); background:#fff;}
+  .rm-input{position:relative;}
+  .rm-input::before{content:"RM"; position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--purple-deep); font-size:12px; font-weight:600; pointer-events:none;}
+  .rm-input input{padding-left:34px;}
+  .btn{
+    border:none; border-radius:12px; padding:11px 14px; font-size:14px; font-weight:600; cursor:pointer;
+    background:var(--purple-soft); color:var(--purple-deep); transition:.15s;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:var(--purple-deep); color:#fff; box-shadow:var(--shadow); width:100%;}
+  .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--muted);}
+  .btn.danger{background:#fbeaea; color:var(--danger);}
+  .btn.sm{padding:7px 11px; font-size:12px; border-radius:10px;}
+  .btn-row{display:flex; gap:9px; margin-top:4px;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th,td{padding:9px 7px; text-align:left; border-bottom:1px solid var(--line);}
+  th{color:var(--muted); font-weight:600; font-size:11px;}
+  td.amt{font-variant-numeric:tabular-nums; white-space:nowrap;}
+  td .rm{color:var(--purple-deep); font-weight:600;}
+  .income .rm{color:var(--ok);}
+  .expense .rm{color:var(--danger);}
+  .pill{display:inline-block; font-size:10.5px; padding:2px 8px; border-radius:20px; background:var(--accent-soft); color:var(--purple-deep);}
+  .pill.gray{background:#f0eef5; color:var(--muted);}
+  .pill.ok{background:#e9f4ee; color:var(--ok);}
+  .pill.danger{background:#fbeaea; color:var(--danger);}
+  .template{background:#faf9fe; border:1px dashed var(--purple); border-radius:12px; padding:11px; font-size:12px; color:var(--muted); word-break:break-all; line-height:1.7;}
+  .copy-btn{margin-top:8px;}
+  .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .stat{background:var(--accent-soft); border-radius:14px; padding:12px 10px; text-align:center;}
+  .stat .v{font-size:17px; font-weight:700; color:var(--purple-deep); margin-top:3px; font-variant-numeric:tabular-nums;}
+  .stat .v.in{color:var(--ok);} .stat .v.out{color:var(--danger);}
+  .pie{width:170px; height:170px; border-radius:50%; margin:6px auto 4px; box-shadow:inset 0 0 0 1px var(--line);}
+  .legend{display:flex; flex-wrap:wrap; gap:7px 12px; margin-top:10px; font-size:11.5px;}
+  .legend span{display:flex; align-items:center; gap:5px; color:var(--muted);}
+  .legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+  .debt-card{border:1px solid var(--line); border-radius:16px; padding:13px; margin-bottom:12px; background:#fcfbff;}
+  .debt-card.done{opacity:.72;}
+  .debt-title{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .debt-title b{font-size:14px;}
+  .debt-fields{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .debt-fields .full{grid-column:1 / -1;}
+  .mini{font-size:11px; color:var(--muted); margin-bottom:3px; display:block;}
+  .budget-row{display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);}
+  .budget-row.over .bv{color:var(--danger); font-weight:700;}
+  .bar{height:8px; border-radius:6px; background:#eee9f5; overflow:hidden; margin-top:4px;}
+  .bar > i{display:block; height:100%; background:var(--purple);}
+  .bar > i.over{background:var(--danger);}
+  .lib-group{margin-bottom:12px;}
+  .lib-group .lg-t{font-size:12px; font-weight:700; color:var(--purple-deep); margin-bottom:6px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{font-size:11.5px; background:#f3f0fa; color:var(--purple-deep); padding:4px 10px; border-radius:20px;}
+  .empty{text-align:center; color:var(--muted); font-size:13px; padding:24px 0;}
+  .toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:#3a3a44; color:#fff; padding:11px 18px; border-radius:14px; font-size:13px; opacity:0; transition:.25s; z-index:50; pointer-events:none; box-shadow:var(--shadow);}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .hint{background:var(--accent-soft); border-radius:12px; padding:11px 13px; font-size:12px; color:#6f6398; line-height:1.7; margin-bottom:12px;}
+  .banner{background:#fdeaea; border:1px solid #f3c2c2; color:#c14b4b; border-radius:12px; padding:11px 13px; font-size:12.5px; line-height:1.7; margin-bottom:12px;}
+  .banner b{color:#a83535;}
+  .hint b{color:var(--purple-deep);}
+  .seg{display:flex; background:#efeaf8; border-radius:12px; padding:4px; gap:4px;}
+  .seg button{flex:1; border:none; background:transparent; padding:9px; border-radius:9px; font-size:13px; color:var(--muted); font-weight:600; cursor:pointer;}
+  .seg button.on{background:#fff; color:var(--purple-deep); box-shadow:var(--shadow);}
+  .link-line{font-size:11.5px; color:var(--purple-deep); margin-top:6px;}
+  .scrollt{font-size:11px; color:var(--muted); margin:2px 0 8px;}
+  .barwrap{margin:7px 0;}
+  .barwrap .bl{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted);}
+  /* 云同步 */
+  .btn-cloud{margin-left:8px; border:1px solid var(--purple); background:var(--purple-soft); color:var(--purple-deep); border-radius:10px; padding:6px 11px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:6px;}
+  .cloud-dot{width:8px; height:8px; border-radius:50%; background:#cfc8e6; display:inline-block;}
+  .cloud-dot.ok{background:var(--ok);} .cloud-dot.err{background:var(--danger);}
+  .modal-mask{position:fixed; inset:0; background:rgba(40,36,56,.42); display:none; align-items:center; justify-content:center; z-index:60; padding:16px;}
+  .modal-mask.show{display:flex;}
+  .modal{background:#fff; border-radius:18px; width:100%; max-width:420px; padding:18px; box-shadow:var(--shadow); max-height:86vh; overflow-y:auto;}
+  .modal h2{font-size:16px; margin:0 0 6px; display:flex; align-items:center; gap:6px;}
+  .modal .mc{font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:12px;}
+  .modal label{display:block; font-size:12px; color:var(--purple-deep); font-weight:700; margin:10px 0 4px;}
+  .modal input[type=password], .modal input[type=text]{width:100%; border:1px solid var(--line); border-radius:10px; padding:10px; font-size:13px; box-sizing:border-box;}
+  .modal .btn-row{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;}
+  .modal .btn{flex:1; min-width:120px; border:none; border-radius:12px; padding:11px; font-size:13px; font-weight:700; cursor:pointer;}
+  .modal .btn.primary{background:var(--purple); color:#fff;}
+  .modal .btn.ghost{background:var(--accent-soft); color:var(--purple-deep);}
+  .modal .btn.warn{background:#fdeaea; color:#c14b4b;}
+  .modal .synclog{font-size:11.5px; color:var(--muted); margin-top:12px; min-height:18px; line-height:1.6;}
+  .modal .synclog.ok{color:var(--ok);}
+  .modal .synclog.err{color:var(--danger);}
+  .modal .close{position:absolute; top:14px; right:16px; border:none; background:transparent; font-size:20px; color:var(--muted); cursor:pointer;}
+  .modal-wrap{position:relative;}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="rail" id="rail">
+    <div class="logo">🪪</div>
+  </nav>
+  <div class="content">
+    <header class="top">
+      <h1>个人工作台</h1>
+      <div class="savebox">
+        <span class="save-status" id="saveStatus">已保存</span>
+        <button class="btn-save" onclick="manualSave()">保存</button>
+        <button class="btn-cloud" onclick="openCloud()" id="cloudBtn">☁️ 云同步<span class="cloud-dot" id="cloudDot" title="☁️ 云同步未开启"></span></button>
+      </div>
+    </header>
+    <div class="scroll" id="scroll"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="modal-mask" id="cloudModal" onclick="if(event.target===this)closeCloud()">
+  <div class="modal modal-wrap">
+    <button class="close" onclick="closeCloud()">×</button>
+    <h2>☁️ 云同步</h2>
+    <div class="mc">
+      数据保存在<b>你自己的 GitHub 私密 Gist</b>。换手机 / 换浏览器时，填同一个 token 点「从云端拉取」即可恢复全部数据。
+      首次「上传到云」会自动创建一个私密 Gist。token 只存在本机，不上传第三方。
+    </div>
+    <label>GitHub Token（建议用仅 gist 权限的 Fine-grained token）</label>
+    <input type="password" id="cloudToken" placeholder="粘贴你的 GitHub Token，如 ghp_xxx" autocomplete="off">
+    <div class="btn-row">
+      <button class="btn ghost" onclick="cloudSaveToken()">保存 Token</button>
+      <button class="btn warn" onclick="cloudClearBind()">解绑 Gist</button>
+    </div>
+    <label>自定义域名（可选，如 note.yourdomain.com）</label>
+    <input type="text" id="cloudDomain" placeholder="留空则使用默认 *.github.io 链接" autocomplete="off">
+    <div class="btn-row">
+      <button class="btn ghost" onclick="cloudSaveDomain()">设置域名</button>
+      <button class="btn ghost" onclick="cloudClearDomain()">清除域名</button>
+    </div>
+    <div class="synclog" id="gistIdInfo"></div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="cloudPush()">⬆️ 上传到云</button>
+      <button class="btn primary" onclick="cloudPull()">⬇️ 从云端拉取</button>
+    </div>
+    <div class="synclog" id="cloudLog"></div>
+  </div>
+</div>
+
+<script>
+/* ============ 选项库（已全部内置） ============ */
+const OPTIONS = {
+  incomeTypes:['收入','支出'],
+  incomeCats:['工资','奖金','兼职','理财收益','红包','其他收入','借款'],
+  expenseCats:['餐饮','交通','购物','孩子','电子烟','香烟','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
+  members:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','母女仨','家婆','妹妹','爸爸','妈妈','叔叔','朋友'],
+  locations:['28间','二街','77咖啡店','百福叻沙','家园咖啡店','中兴咖啡店','国记点心','45菜市场','LOTUS','ECONSAVE','HASANI BOOK','ECO','MR DIY','EASY HOME','UTC巴刹','老街场','UTC','MIXUE蜜雪','TAMAN KELADI','TAMAN INTAN','其他'],
+  payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
+  txnTypes:['CASH','DUITNOW TRANSFER','QR SCAN TRANSFER']
+};
+const STAT_MEMBERS=OPTIONS.members;
+const STORE_KEY='mobileWorkbenchDB_v1';
+
+/* ============ 数据层 ============ */
+let DB = load();
+let editingId=null;
+let curModule='overview';
+let debtViewMode='all'; // all | active
+let storageOK=true;
+
+function testStorage(){
+  try{ const k='__wb_test__'; localStorage.setItem(k,'1'); const v=localStorage.getItem(k); localStorage.removeItem(k); return v==='1'; }
+  catch(e){ return false; }
+}
+storageOK = testStorage();
+
+function load(){
+  try{
+    const raw=localStorage.getItem(STORE_KEY);
+    if(raw){ const d=JSON.parse(raw); if(d&&d.records) return d; }
+  }catch(e){ console.warn('load fail',e); }
+  return seed();
+}
+function seed(){
+  return {
+    records:[],
+    debts:[
+      {id:uid(),name:'KHIND洗衣机',totalAmount:4500,installments:36,monthlyPayment:125,startDate:'2026-06-01',payMethod:'',status:'正常还款',note:'1/6/2026-1/6/2027月供62.5；1/7/2027起月供125'},
+      {id:uid(),name:'COWAY饮水机',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'无',note:''},
+      {id:uid(),name:'冰箱',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'无',note:''},
+      {id:uid(),name:'车贷 JXC 8339',totalAmount:76356,installments:108,monthlyPayment:707,startDate:'2024-07-11',payMethod:'',status:'正常还款',note:'月供707×108=76356'},
+      {id:uid(),name:'个人欠款',totalAmount:1000,installments:null,monthlyPayment:0,startDate:'',payMethod:'',status:'待结清',note:'每个星期利息100'}
+    ],
+    budgets:{ monthly:0, weekly:0, cat:{} }
+  };
+}
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); storageOK=true; markSaved(); }
+  catch(e){ storageOK=false; markSavedFail(); console.warn('save fail',e); }
+  autoCloudSync();
+}
+let _autoCloudT=null;
+let SUPPRESS_AUTO_CLOUD=false;
+function autoCloudSync(){
+  // 仅在已配置 token 且已绑定 gist 时，节流自动上传云端（每 6 秒最多一次）
+  if(SUPPRESS_AUTO_CLOUD) return;
+  const tk=localStorage.getItem(GIST_TOKEN_KEY);
+  const gid=localStorage.getItem(GIST_ID_KEY);
+  if(!tk || !gid) return;
+  if(_autoCloudT) return;
+  _autoCloudT=setTimeout(()=>{ _autoCloudT=null; cloudPush(true); }, 6000);
+}
+function markSaved(){ const el=document.getElementById('saveStatus'); if(el){el.textContent='已保存'; el.classList.remove('pending');} }
+function markSavedFail(){ const el=document.getElementById('saveStatus'); if(el){el.textContent='⚠️ 无法本地保存'; el.classList.add('pending');} }
+function autoSave(){ const el=document.getElementById('saveStatus'); if(el){el.textContent=storageOK?'自动保存中…':'⚠️ 无法本地保存'; el.classList.add('pending');} clearTimeout(autoSave._t); autoSave._t=setTimeout(save,400); }
+function manualSave(){
+  save();
+  if(storageOK){ toast('✅ 数据已保存到本地浏览器'); }
+  else { toast('⚠️ 本地保存不可用，已为你导出备份文件，请保存到手机'); exportJSON(); }
+}
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtRM(n){ const v=Number(n)||0; return 'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function debtName(id){ const d=DB.debts.find(x=>x.id===id); return d?d.name:''; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ============ 债务计算 ============ */
+function debtStats(d){
+  const linked=DB.records.filter(r=>r.linkedDebtId===d.id && r.type==='支出');
+  const autoPaidPrincipal=linked.reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const paidCount=linked.length;
+  const total=Number(d.totalAmount)||0;
+  // 手动覆盖：未填则用自动值
+  const paidPrincipal = (d.paidAmountManual!=null && d.paidAmountManual!=='' && !isNaN(parseFloat(d.paidAmountManual))) ? parseFloat(d.paidAmountManual) : autoPaidPrincipal;
+  const paidPeriods   = (d.paidPeriodsManual!=null && d.paidPeriodsManual!=='' && !isNaN(parseFloat(d.paidPeriodsManual))) ? parseFloat(d.paidPeriodsManual) : paidCount;
+  let remaining = total - paidPrincipal;
+  if(d.remainingManual!=null && d.remainingManual!=='' && !isNaN(parseFloat(d.remainingManual))) remaining = parseFloat(d.remainingManual);
+  let remainingPeriods = (d.installments && d.installments>0) ? Math.max(0, d.installments - paidPeriods) : null;
+  return {paidPrincipal, paidPeriods, remaining:Math.max(0,remaining), remainingPeriods, linkedCount:paidCount, autoPaidPrincipal};
+}
+
+/* ============ 渲染：导航 ============ */
+const NAVS=[
+  {id:'overview', ic:'🏠', label:'概览'},
+  {id:'quick', ic:'⚡', label:'记账'},
+  {id:'detail', ic:'📑', label:'明细'},
+  {id:'debt', ic:'💳', label:'债务'},
+  {id:'stats', ic:'📊', label:'统计'},
+  {id:'budget', ic:'💰', label:'预算'},
+  {id:'library', ic:'📋', label:'选项库'},
+  {id:'backup', ic:'💾', label:'备份'}
+];
+function renderNav(){
+  const rail=document.getElementById('rail');
+  rail.innerHTML='<div class="brand">◆<span>我的工作台</span></div>'+NAVS.map(n=>
+    `<button class="nav-btn ${n.id===curModule?'active':''}" onclick="go('${n.id}')">
+       <span class="ic">${n.ic}</span><span>${n.label}</span></button>`).join('');
+}
+function go(id){ curModule=id; renderNav(); render(); }
+
+/* ============ 主渲染 ============ */
+function render(){
+  const sc=document.getElementById('scroll');
+  let html='';
+  html += storageBanner();
+  if(curModule==='overview') html+=viewOverview();
+  else if(curModule==='quick') html+=viewQuick();
+  else if(curModule==='detail') html+=viewDetail();
+  else if(curModule==='debt') html+=viewDebt();
+  else if(curModule==='stats') html+=viewStats();
+  else if(curModule==='budget') html+=viewBudget();
+  else if(curModule==='library') html+=viewLibrary();
+  else if(curModule==='backup') html+=viewBackup();
+  sc.innerHTML=html;
+  if(curModule==='quick') bindQuick();
+  if(curModule==='detail') bindDetail();
+  if(curModule==='debt') bindDebt();
+  if(curModule==='budget') bindBudget();
+  if(curModule==='backup') bindBackup();
+}
+function storageBanner(){
+  if(storageOK) return '';
+  return `<div class="banner">⚠️ 当前环境<b>无法本地保存</b>（多为用 <b>file://</b> 直接打开网页所致）。刷新/关闭会丢失数据！请点「💾 备份」→「导出备份JSON」保存到手机，下次用「导入恢复」载入。</div>`;
+}
+
+/* ============ 模块：概览 ============ */
+function viewOverview(){
+  const now=todayStr(); const ym=now.slice(0,7); const mon=weekMonday(now);
+  let wInc=0,wOut=0;
+  DB.records.forEach(r=>{ if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
+  let mInc=0,mOut=0;
+  DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
+  const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
+  const recent = DB.records.slice(0,5);
+  const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
+  return `
+  <div class="card">
+    <h2>📊 本周收支概览 <span class="tag">${weekRange} · 周一起</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">本周收入</div><div class="v in">${fmtRM(wInc)}</div></div>
+      <div class="stat"><div class="mini">本周支出</div><div class="v out">${fmtRM(wOut)}</div></div>
+      <div class="stat"><div class="mini">本周结余</div><div class="v">${fmtRM(wInc-wOut)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📈 本月收支与负债概览 <span class="tag">${ym}</span></h2>
+    <div class="stat-grid-2">
+      <div class="stat"><div class="mini">本月收入</div><div class="v in">${fmtRM(mInc)}</div></div>
+      <div class="stat"><div class="mini">本月支出</div><div class="v out">${fmtRM(mOut)}</div></div>
+      <div class="stat"><div class="mini">本月净结余</div><div class="v">${fmtRM(mInc-mOut)}</div></div>
+      <div class="stat"><div class="mini">待还债务本金</div><div class="v" style="color:${debtRemain>0?'var(--danger)':'var(--ok)'}">${fmtRM(debtRemain)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>🕒 最近记账 <span class="tag">共 ${DB.records.length} 条</span></h2>
+    ${recent.length? recent.map(r=>`
+      <div class="recent-row">
+        <div class="rr-left">
+          <div>${esc(r.date)} · ${esc(r.category)}</div>
+          <div class="rr-sub">${esc(r.member||'')}${r.location?' · '+esc(r.location):''}</div>
+        </div>
+        <div class="rr-amt ${r.type==='收入'?'in':'out'}">${r.type==='收入'?'+':'-'}${fmtRM(r.amount)}</div>
+      </div>`).join('') : '<div class="empty">暂无记录，去「记账」录入第一笔吧</div>'}
+  </div>
+  <div class="card">
+    <h2>💡 快速入口</h2>
+    <div class="btn-row">
+      <button class="btn primary" onclick="go('quick')">⚡ 记一笔</button>
+      <button class="btn" onclick="go('debt')">💳 看债务进度</button>
+    </div>
+    <div class="muted" style="margin-top:10px;font-size:11px">数据保存在本机浏览器（localStorage），不会上传。清空缓存将丢失记录。</div>
+  </div>`;
+}
+
+/* ============ 模块：快速记账 ============ */
+function viewQuick(){
+  const ed = editingId? DB.records.find(r=>r.id===editingId) : null;
+  const rec = ed || {date:todayStr(),type:'支出',amount:'',category:'',location:'',note:'',orderNo:'',payMethod:'',txnType:'',member:'',linkedDebtId:'',borrowFrom:'',payTo:''};
+  const cats = rec.type==='收入'? OPTIONS.incomeCats : OPTIONS.expenseCats;
+  const catOpts = cats.map(c=>`<option ${c===rec.category?'selected':''}>${c}</option>`).join('');
+  const memOpts = OPTIONS.members.map(m=>`<option ${m===rec.member?'selected':''}>${m}</option>`).join('');
+  const locOpts = ['<option value="">（不选）</option>'].concat(OPTIONS.locations.map(l=>`<option ${l===rec.location?'selected':''}>${l}</option>`)).join('');
+  const payOpts = ['<option value="">（不选）</option>'].concat(OPTIONS.payMethods.map(p=>`<option ${p===rec.payMethod?'selected':''}>${p}</option>`)).join('');
+  const txnOpts = ['<option value="">（不选）</option>'].concat(OPTIONS.txnTypes.map(t=>`<option ${t===rec.txnType?'selected':''}>${t}</option>`)).join('');
+  const debtOpts = ['<option value="">（不关联）</option>'].concat(DB.debts.map(d=>`<option value="${d.id}" ${d.id===rec.linkedDebtId?'selected':''}>${esc(d.name)}</option>`)).join('');
+  const tpl = `日期｜收支类型｜金额｜消费分类｜地点｜单号｜支付方式｜家庭成员\n${todayStr()}｜｜｜｜｜｜｜`;
+  return `
+  <div class="card">
+    <h2>⚡ 快速记账录入 <span class="tag">${ed?'编辑中':'新增'}</span></h2>
+    <div class="hint">💡 复制下方模板整行填空即可；也可直接用上方表单一键录入。所有金额填写纯数字，货币默认 <b>RM</b>，无需符号。</div>
+    <div class="template" id="tplText">${esc(tpl)}</div>
+    <button class="btn copy-btn" onclick="copyTpl()">📋 复制空白模板</button>
+  </div>
+
+  <div class="card">
+    <h2>${ed?'✏️ 修改这笔记录':'➕ 录入一笔'}</h2>
+    <label class="fld"><span class="lb">日期</span><input type="date" id="f_date" value="${esc(rec.date)}"></label>
+    <div class="row">
+      <label class="fld"><span class="lb">收支类型</span>
+        <select id="f_type" onchange="rebindCats()">
+          <option value="收入" ${rec.type==='收入'?'selected':''}>收入</option>
+          <option value="支出" ${rec.type==='支出'?'selected':''}>支出</option>
+        </select></label>
+      <label class="fld"><span class="lb">金额（RM，纯数字）</span>
+        <div class="rm-input"><input type="number" step="0.01" id="f_amount" value="${esc(rec.amount)}" placeholder="0.00"></div></label>
+    </div>
+    <label class="fld"><span class="lb">消费分类${rec.type==='收入'?'（含「借款」为流入）':'（含「借出/还款」为流出）'}</span>
+      <select id="f_category">${catOpts}</select></label>
+    <div class="row">
+      <label class="fld"><span class="lb">地点</span><select id="f_location">${locOpts}</select></label>
+      <label class="fld"><span class="lb">单号（无则留空）</span><input id="f_orderNo" value="${esc(rec.orderNo)}" placeholder="无"></label>
+    </div>
+    <div class="row">
+      <label class="fld"><span class="lb">支付方式</span><select id="f_pay">${payOpts}</select></label>
+      <label class="fld"><span class="lb">交易类型</span><select id="f_txn">${txnOpts}</select></label>
+    </div>
+    <div class="row">
+      <label class="fld"><span class="lb">家庭成员</span><select id="f_member">${memOpts}</select></label>
+      <label class="fld" id="f_debtwrap"><span class="lb">关联债务（还款自动扣本金）</span><select id="f_debt">${debtOpts}</select></label>
+    </div>
+    <label class="fld" id="f_partywrap" style="display:none"><span class="lb" id="f_party_lb">借款人</span><input id="f_party" value="${esc(rec.borrowFrom||rec.payTo||'')}" placeholder=""></label>
+    <label class="fld"><span class="lb">备注</span><input id="f_note" value="${esc(rec.note)}" placeholder="选填"></label>
+    <div class="btn-row">
+      <button class="btn primary" onclick="submitRecord()">${ed?'保存修改':'添加记录'}</button>
+      ${ed?'<button class="btn ghost" onclick="cancelEdit()">取消</button>':''}
+    </div>
+    <div class="link-line" id="linkHint"></div>
+  </div>`;
+}
+function rebindCats(){
+  const type=document.getElementById('f_type').value;
+  const cats = type==='收入'? OPTIONS.incomeCats : OPTIONS.expenseCats;
+  const sel=document.getElementById('f_category');
+  const cur=sel.value;
+  sel.innerHTML = cats.map(c=>`<option ${c===cur?'selected':''}>${c}</option>`).join('');
+  const isInc=type==='收入';
+  document.getElementById('f_debtwrap').style.opacity=isInc?'.4':'';
+  document.getElementById('f_debt').disabled=isInc;
+  document.getElementById('linkHint').textContent = isInc?'':'(支出还款选择关联债务后，保存会自动扣减对应债务本金)';
+  rebindParty();
+}
+function rebindParty(){
+  const type=document.getElementById('f_type').value;
+  const cat=document.getElementById('f_category').value;
+  const wrap=document.getElementById('f_partywrap');
+  const lb=document.getElementById('f_party_lb');
+  const inp=document.getElementById('f_party');
+  if(type==='收入' && cat==='借款'){
+    wrap.style.display='block'; lb.textContent='借款人（向谁借的）';
+    inp.placeholder='如：老公 / 朋友 / 银行';
+  } else if(type==='支出' && (cat==='借出' || cat==='还款')){
+    wrap.style.display='block'; lb.textContent= cat==='还款' ? '还给谁' : '借给谁';
+    inp.placeholder= cat==='还款' ? '如：银行 / 朋友' : '如：朋友 / 家人';
+  } else {
+    wrap.style.display='none'; inp.value='';
+  }
+}
+function copyTpl(){
+  const t=document.getElementById('tplText').innerText;
+  navigator.clipboard?.writeText(t).then(()=>toast('已复制空白模板')).catch(()=>toast('复制失败，请手动选择'));
+}
+function bindQuick(){
+  rebindCats();
+  const catEl=document.getElementById('f_category');
+  if(catEl) catEl.addEventListener('change', rebindParty);
+}
+function submitRecord(){
+  const type=document.getElementById('f_type').value;
+  const amount=parseFloat(document.getElementById('f_amount').value);
+  if(isNaN(amount)||amount<=0){ toast('请填写有效金额'); return; }
+  const linkedDebtId=type==='收入'?'':document.getElementById('f_debt').value;
+  const category=document.getElementById('f_category').value;
+  const partyVal=(document.getElementById('f_party')||{value:''}).value.trim();
+  const borrowFrom = (type==='收入' && category==='借款') ? partyVal : '';
+  const payTo      = (type==='支出' && (category==='借出' || category==='还款')) ? partyVal : '';
+  const rec={
+    date:document.getElementById('f_date').value||todayStr(),
+    type, amount:amount,
+    category,
+    location:document.getElementById('f_location').value,
+    orderNo:document.getElementById('f_orderNo').value.trim(),
+    payMethod:document.getElementById('f_pay').value,
+    txnType:document.getElementById('f_txn').value,
+    member:document.getElementById('f_member').value,
+    note:document.getElementById('f_note').value.trim(),
+    linkedDebtId:linkedDebtId||'',
+    borrowFrom, payTo
+  };
+  if(editingId){ const i=DB.records.findIndex(r=>r.id===editingId); DB.records[i]={...DB.records[i],...rec}; editingId=null; toast('已保存修改'); }
+  else { rec.id=uid(); DB.records.unshift(rec); toast('✅ 已添加记录'); }
+  if(linkedDebtId){ const s=debtStats(DB.debts.find(d=>d.id===linkedDebtId)); toast('已关联「'+debtName(linkedDebtId)+'」，剩余本金 '+fmtRM(s.remaining)); }
+  autoSave(); render();
+}
+function cancelEdit(){ editingId=null; render(); }
+
+/* ============ 模块：记账明细（+ 债务台账在其下方） ============ */
+function viewDetail(){
+  const rows = DB.records;
+  let body = rows.length? rows.map(r=>{
+    const cls=r.type==='收入'?'income':'expense';
+    const partyLine = r.borrowFrom? `<br><span class="muted">← ${esc(r.borrowFrom)}</span>` : (r.payTo? `<br><span class="muted">→ ${esc(r.payTo)}</span>` : '');
+    return `<tr class="${cls}">
+      <td>${esc(r.date)}<br><span class="muted">${esc(r.member)}</span></td>
+      <td><span class="pill ${r.type==='收入'?'ok':'gray'}">${r.type}</span><br><span class="pill">${esc(r.category)}</span>${partyLine}</td>
+      <td class="amt"><span class="rm">${fmtRM(r.amount)}</span>${r.linkedDebtId?'<br><span class="pill gray">🔗'+esc(debtName(r.linkedDebtId))+'</span>':''}</td>
+      <td><span class="muted">${esc(r.location||'')}</span>${r.orderNo?'<br><span class="muted">#'+esc(r.orderNo)+'</span>':''}</td>
+      <td>
+        <button class="btn sm" onclick="editRecord('${r.id}')">改</button>
+        <button class="btn sm danger" onclick="delRecord('${r.id}')">删</button>
+      </td></tr>`;
+  }).join('') : `<tr><td colspan="5"><div class="empty">暂无记录，去「记账」录入第一笔吧</div></td></tr>`;
+
+  return `
+  <div class="card">
+    <h2>📑 完整记账录入明细表 <span class="tag">共 ${rows.length} 笔</span></h2>
+    <div class="muted" style="margin-bottom:8px">字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜支付方式｜交易类型｜成员｜借款人/还给谁｜备注｜关联债务</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>日期/成员</th><th>类型/分类</th><th>金额</th><th>地点/单号</th><th>操作</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>
+    <button class="btn primary" style="margin-top:12px" onclick="go('quick')">➕ 新增一笔</button>
+  </div>
+  <div id="debtInDetail"></div>`;
+}
+function bindDetail(){ renderDebtInto('debtInDetail'); }
+function editRecord(id){ editingId=id; go('quick'); }
+function delRecord(id){
+  if(!confirm('确定删除这笔记录？')) return;
+  DB.records=DB.records.filter(r=>r.id!==id);
+  if(editingId===id) editingId=null;
+  autoSave(); render();
+}
+
+/* ============ 模块：债务台账 ============ */
+function debtCardHTML(d){
+  const s=debtStats(d);
+  const done = d.status==='已结清';
+  const statusPill = done?'<span class="pill ok">已结清</span>': (d.status==='待结清'?'<span class="pill danger">'+esc(d.status)+'</span>':'<span class="pill">'+esc(d.status)+'</span>');
+  const hasPaidOverride = (d.paidAmountManual!=null && d.paidAmountManual!=='');
+  const hasPeriodOverride = (d.paidPeriodsManual!=null && d.paidPeriodsManual!=='');
+  return `<div class="debt-card ${done?'done':''}" data-id="${d.id}">
+    <div class="debt-title"><b>${esc(d.name)}</b> ${statusPill}</div>
+    <div class="debt-fields">
+      <label><span class="mini">总金额(RM)</span><div class="rm-input"><input type="number" step="0.01" value="${d.totalAmount}" onchange="updDebt('${d.id}','totalAmount',this.value)"></div></label>
+      <label><span class="mini">分期期数（无分期填0）</span><input type="number" value="${d.installments==null?'':d.installments}" onchange="updDebt('${d.id}','installments',this.value)"></label>
+      <label><span class="mini">每月月供(RM)</span><div class="rm-input"><input type="number" step="0.01" value="${d.monthlyPayment}" onchange="updDebt('${d.id}','monthlyPayment',this.value)"></div></label>
+      <label><span class="mini">起始日期</span><input type="date" value="${d.startDate||''}" onchange="updDebt('${d.id}','startDate',this.value)"></label>
+      <label><span class="mini">支付方式</span>
+        <select onchange="updDebt('${d.id}','payMethod',this.value)">
+          <option value="">（不选）</option>
+          ${OPTIONS.payMethods.map(p=>`<option ${p===d.payMethod?'selected':''}>${p}</option>`).join('')}
+        </select></label>
+      <label><span class="mini">状态</span>
+        <select onchange="updDebt('${d.id}','status',this.value)">
+          ${['正常还款','已结清','无','待结清'].map(o=>`<option ${o===d.status?'selected':''}>${o}</option>`).join('')}
+        </select></label>
+      <label class="full"><span class="mini">备注（如利息规则）</span><input value="${esc(d.note)}" onchange="updDebt('${d.id}','note',this.value)"></label>
+    </div>
+    <div class="debt-paid">
+      <div class="pi">
+        <span class="lb">✅ 已还款金额</span>
+        <div class="vv in">${fmtRM(s.paidPrincipal)}</div>
+        <input type="number" step="0.01" placeholder="留空=按关联还款自动" value="${hasPaidOverride?d.paidAmountManual:''}" onchange="updDebt('${d.id}','paidAmountManual',this.value)">
+        <span class="manual-hint">${hasPaidOverride?'已手动覆盖':'自动：'+fmtRM(s.autoPaidPrincipal)+'（'+s.linkedCount+'笔）'}</span>
+      </div>
+      <div class="pi">
+        <span class="lb">📌 剩余本金</span>
+        <div class="vv" style="color:${done?'var(--ok)':'var(--danger)'}">${fmtRM(s.remaining)}</div>
+        <span class="manual-hint">= 总金额 ${fmtRM(d.totalAmount||0)} − 已还</span>
+      </div>
+      <div class="pi">
+        <span class="lb">🔁 已还款期数</span>
+        <div class="vv">${s.paidPeriods} 期</div>
+        <input type="number" placeholder="留空=按关联笔数自动" value="${hasPeriodOverride?d.paidPeriodsManual:''}" onchange="updDebt('${d.id}','paidPeriodsManual',this.value)">
+        <span class="manual-hint">${hasPeriodOverride?'已手动覆盖':'自动：'+s.linkedCount+' 期'}</span>
+      </div>
+      <div class="pi">
+        <span class="lb">⏳ 剩余期数</span>
+        <div class="vv">${s.remainingPeriods!=null?s.remainingPeriods+' 期':'—'}</div>
+        <span class="manual-hint">${d.installments>0?d.installments+' 期 − 已还':d.installments===0?'无分期':'—'}</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      ${(hasPaidOverride||hasPeriodOverride)?'<button class="btn sm ghost" onclick="clearDebtOverride(\''+d.id+'\')">恢复自动核算</button>':''}
+      <button class="btn sm danger" onclick="delDebt('${d.id}')">删除债务</button>
+    </div>
+  </div>`;
+}
+function viewDebt(){
+  let list = DB.debts.slice();
+  if(debtViewMode==='active') list=list.filter(d=>d.status!=='已结清');
+  const totalRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
+  return `
+  <div class="card">
+    <h2>💳 个人债务台账 <span class="tag">未结清剩余本金 ${fmtRM(totalRemain)}</span></h2>
+    <div class="seg" style="margin-bottom:10px">
+      <button class="${debtViewMode==='all'?'on':''}" onclick="debtViewMode='all';render()">全部</button>
+      <button class="${debtViewMode==='active'?'on':''}" onclick="debtViewMode='active';render()">仅未结清</button>
+    </div>
+    <div class="hint">💡 在「记账」录入还款时选择 <b>关联债务</b>，保存后自动扣减对应本金、累计期数。结清后把状态改为「已结清」即停止计入负债。</div>
+    <div id="debtList"></div>
+    <h2 style="margin-top:14px">➕ 新增其他债务</h2>
+    <label class="fld"><span class="lb">债务设备/名称</span><input id="nd_name" placeholder="如：空调分期"></label>
+    <div class="row">
+      <label class="fld"><span class="lb">总金额(RM)</span><div class="rm-input"><input type="number" step="0.01" id="nd_total"></div></label>
+      <label class="fld"><span class="lb">分期期数（无填0）</span><input type="number" id="nd_inst"></label>
+    </div>
+    <div class="row">
+      <label class="fld"><span class="lb">月供(RM)</span><div class="rm-input"><input type="number" step="0.01" id="nd_month"></div></label>
+      <label class="fld"><span class="lb">起始日期</span><input type="date" id="nd_start"></label>
+    </div>
+    <button class="btn primary" onclick="addDebt()">添加债务</button>
+  </div>`;
+}
+function renderDebtInto(elId){
+  const el=document.getElementById(elId); if(!el) return;
+  el.innerHTML=`<div class="card">
+    <h2>💳 债务台账（随记账联动）</h2>
+    ${DB.debts.map(debtCardHTML).join('')||'<div class="empty">暂无债务</div>'}
+  </div>`;
+}
+function renderDebtList(){
+  const el=document.getElementById('debtList'); if(!el) return;
+  let list=DB.debts.slice();
+  if(debtViewMode==='active') list=list.filter(d=>d.status!=='已结清');
+  el.innerHTML=list.map(debtCardHTML).join('')||'<div class="empty">暂无债务</div>';
+}
+function bindDebt(){ renderDebtList(); }
+function updDebt(id,field,val){
+  const d=DB.debts.find(x=>x.id===id); if(!d) return;
+  if(field==='totalAmount'||field==='monthlyPayment') d[field]=parseFloat(val)||0;
+  else if(field==='installments'){ const v=parseFloat(val); d.installments = (v==null||isNaN(v)||v<=0)?0:v; }
+  else if(field==='paidAmountManual'){ if(val===''||val==null) delete d.paidAmountManual; else d.paidAmountManual=parseFloat(val)||0; }
+  else if(field==='paidPeriodsManual'){ if(val===''||val==null) delete d.paidPeriodsManual; else d.paidPeriodsManual=parseInt(val)||0; }
+  else d[field]=val;
+  autoSave();
+  if(curModule==='debt') renderDebtList();
+  else renderDebtInto('debtInDetail');
+}
+function clearDebtOverride(id){
+  const d=DB.debts.find(x=>x.id===id); if(!d) return;
+  delete d.paidAmountManual; delete d.paidPeriodsManual; delete d.remainingManual;
+  autoSave();
+  if(curModule==='debt') renderDebtList();
+  else renderDebtInto('debtInDetail');
+  toast('已恢复自动核算');
+}
+function addDebt(){
+  const name=document.getElementById('nd_name').value.trim();
+  if(!name){ toast('请填写债务名称'); return; }
+  const total=parseFloat(document.getElementById('nd_total').value)||0;
+  const inst=parseFloat(document.getElementById('nd_inst').value)||0;
+  const month=parseFloat(document.getElementById('nd_month').value)||0;
+  const start=document.getElementById('nd_start').value;
+  DB.debts.push({id:uid(),name,totalAmount:total,installments:inst,monthlyPayment:month,startDate:start,payMethod:'',status:'正常还款',note:''});
+  autoSave(); toast('已添加债务'); render();
+}
+function delDebt(id){
+  if(!confirm('删除该债务？已关联的还款记录会保留但不再联动。')) return;
+  DB.debts=DB.debts.filter(d=>d.id!==id);
+  DB.records.forEach(r=>{ if(r.linkedDebtId===id) r.linkedDebtId=''; });
+  autoSave(); render();
+}
+
+/* ============ 模块：数据统计 ============ */
+function monthKey(d){ return (d||'').slice(0,7); }
+function parseDate(s){
+  if(!s) return null;
+  const m=String(s).match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(!m) return null;
+  return new Date(+m[1], +m[2]-1, +m[3]);
+}
+function fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// 返回给定日期所在周的"周一"日期字符串（星期一为一周起始）
+function weekMonday(dateStr){
+  const dt = parseDate(dateStr) || new Date();
+  const dow = dt.getDay(); // 0=Sun..6=Sat
+  const diff = (dow===0 ? -6 : 1-dow);
+  dt.setDate(dt.getDate()+diff);
+  return fmtDate(dt);
+}
+function viewStats(){
+  const now=todayStr(); const ym=now.slice(0,7); const yr=now.slice(0,4); const mon=weekMonday(now);
+  // 今日收支
+  let tInc=0,tOut=0;
+  DB.records.forEach(r=>{ if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
+  let wInc=0,wOut=0;
+  DB.records.forEach(r=>{ if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
+  let inc=0,out=0;
+  DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
+  // 全年
+  let yInc=0,yOut=0;
+  DB.records.forEach(r=>{ if((r.date||'').slice(0,4)===yr){ if(r.type==='收入') yInc+=Number(r.amount)||0; else yOut+=Number(r.amount)||0; } });
+  // 按月柱状（全年）
+  const months={}; for(let i=1;i<=12;i++){ const m=yr+'-'+String(i).padStart(2,'0'); months[m]={inc:0,out:0}; }
+  DB.records.forEach(r=>{ const k=monthKey(r.date); if(months[k]){ if(r.type==='收入') months[k].inc+=Number(r.amount)||0; else months[k].out+=Number(r.amount)||0; } });
+  const maxM=Math.max(1,...Object.values(months).map(m=>m.inc+m.out));
+  // 成员
+  const memStats=STAT_MEMBERS.map(m=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.member===m){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {m,i,o,bal:i-o}; });
+  // 分类饼图（本月支出）
+  const catMap={}; DB.records.forEach(r=>{ if(r.type==='支出'&&monthKey(r.date)===ym){ catMap[r.category]=(catMap[r.category]||0)+Number(r.amount)||0; } });
+  const catArr=Object.entries(catMap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v);
+  const totalCat=catArr.reduce((s,c)=>s+c.v,0);
+  const palette=['#b9aedc','#cdbbe6','#a99bdc','#d9d2ea','#9b8fc9','#e0daf0','#8b7fc7','#cabff0','#b3a7d6','#ddd6ee','#7d6fbf','#e6e1f3','#a892d8','#c2b3e8'];
+  let acc=0, grads=[];
+  catArr.forEach((c,idx)=>{ const pct=totalCat? (c.v/totalCat*100):0; grads.push(`${palette[idx%palette.length]} ${acc.toFixed(2)}% ${(acc+pct).toFixed(2)}%`); acc+=pct; });
+  const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:#eee9f5';
+  const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : '<span class="muted">本月暂无支出</span>';
+
+  const bars=Object.entries(months).map(([m,v])=>{
+    const tot=v.inc+v.out; const h=(tot/maxM*100);
+    const cur=m===ym;
+    return `<div style="flex:1;text-align:center">
+      <div style="height:90px;display:flex;align-items:flex-end;justify-content:center;gap:2px">
+        <div title="收入${fmtRM(v.inc)}" style="width:42%;background:var(--ok);height:${v.inc/maxM*100}%;border-radius:3px 3px 0 0"></div>
+        <div title="支出${fmtRM(v.out)}" style="width:42%;background:var(--danger);height:${v.out/maxM*100}%;border-radius:3px 3px 0 0"></div>
+      </div>
+      <div style="font-size:9px;color:${cur?'var(--purple-deep)':'var(--muted)'};margin-top:3px">${m.slice(5)}</div>
+    </div>`;
+  }).join('');
+
+  const memRows=memStats.map(s=>`<tr><td>${esc(s.m)}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
+
+  return `
+  <div class="card">
+    <h2>⏱️ 今日收支 <span class="tag">${now}</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">今日收入</div><div class="v in">${fmtRM(tInc)}</div></div>
+      <div class="stat"><div class="mini">今日支出</div><div class="v out">${fmtRM(tOut)}</div></div>
+      <div class="stat"><div class="mini">实时结余</div><div class="v">${fmtRM(tInc-tOut)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📊 本周收支 <span class="tag">${mon} 起 · 星期一起</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">本周收入</div><div class="v in">${fmtRM(wInc)}</div></div>
+      <div class="stat"><div class="mini">本周支出</div><div class="v out">${fmtRM(wOut)}</div></div>
+      <div class="stat"><div class="mini">本周结余</div><div class="v">${fmtRM(wInc-wOut)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📊 本月收支 <span class="tag">${ym}</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">总收入</div><div class="v in">${fmtRM(inc)}</div></div>
+      <div class="stat"><div class="mini">总支出</div><div class="v out">${fmtRM(out)}</div></div>
+      <div class="stat"><div class="mini">实时结余</div><div class="v">${fmtRM(inc-out)}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📅 全年收支汇总 <span class="tag">${yr}</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">年收入</div><div class="v in">${fmtRM(yInc)}</div></div>
+      <div class="stat"><div class="mini">年支出</div><div class="v out">${fmtRM(yOut)}</div></div>
+      <div class="stat"><div class="mini">年结余</div><div class="v">${fmtRM(yInc-yOut)}</div></div>
+    </div>
+    <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-end">${bars}</div>
+    <div class="muted" style="margin-top:6px"><span style="color:var(--ok)">■</span> 收入&nbsp;&nbsp;<span style="color:var(--danger)">■</span> 支出</div>
+  </div>
+  <div class="card">
+    <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
+    <table><thead><tr><th>成员</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${memRows}</tbody></table>
+  </div>
+  <div class="card">
+    <h2>🥧 消费分类占比（本月支出）</h2>
+    <div class="pie" style="${pieStyle}"></div>
+    <div class="legend">${legend}</div>
+  </div>`;
+}
+
+/* ============ 模块：预算管理 ============ */
+function viewBudget(){
+  const ym=todayStr().slice(0,7); const mon=weekMonday(todayStr()); const today=todayStr();
+  let monthOut=0, weekOut=0, dayOut=0; const catSpend={};
+  DB.records.forEach(r=>{
+    if(r.type==='支出'){
+      if(monthKey(r.date)===ym){ monthOut+=Number(r.amount)||0; catSpend[r.category]=(catSpend[r.category]||0)+Number(r.amount)||0; }
+      if(weekMonday(r.date)===mon){ weekOut+=Number(r.amount)||0; }
+      if(r.date===today){ dayOut+=Number(r.amount)||0; }
+    }
+  });
+  const mb=DB.budgets.monthly||0;
+  const wb=DB.budgets.weekly||0;
+  const db=DB.budgets.daily||0;
+  const dOver = db>0 && dayOut>db;
+  const over = mb>0 && monthOut>mb;
+  const wOver = wb>0 && weekOut>wb;
+  const rows = OPTIONS.expenseCats.map(c=>{
+    const b=DB.budgets.cat[c]||0; const sp=catSpend[c]||0; const isOver=b>0&&sp>b;
+    const pct = b>0? Math.min(100, sp/b*100):0;
+    return `<div class="budget-row ${isOver?'over':''}">
+      <span>${esc(c)}</span>
+      <span><input class="rm-input" style="font-size:12px;padding:6px 6px 6px 28px" type="number" step="0.01" value="${b}" onchange="setCatBudget('${c}',this.value)" placeholder="0"></span>
+      <span class="amt ${isOver?'':''}">${fmtRM(sp)}</span>
+      <span style="color:${isOver?'var(--danger)':'var(--muted)'};font-size:11px">${b>0?(sp>b?'超 '+fmtRM(sp-b):'剩 '+fmtRM(b-sp)):'—'}</span>
+    </div>
+    <div class="bar"><i class="${isOver?'over':''}" style="width:${pct}%"></i></div>`;
+  }).join('');
+  return `
+  <div class="card">
+    <h2>⏱️ 今日总预算 <span class="tag">${today}</span></h2>
+    <label class="fld"><span class="lb">今日总预算(RM)</span>
+      <div class="rm-input"><input type="number" step="0.01" id="b_day" value="${db}" onchange="DB.budgets.daily=parseFloat(this.value)||0;autoSave();render()"></div></label>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">今日已支出</div><div class="v out" style="${dOver?'color:var(--danger)':''}">${fmtRM(dayOut)}</div></div>
+      <div class="stat"><div class="mini">今日预算</div><div class="v">${fmtRM(db)}</div></div>
+      <div class="stat"><div class="mini">剩余</div><div class="v" style="${dOver?'color:var(--danger)':''}">${fmtRM(db-dayOut)}</div></div>
+    </div>
+    ${dOver?'<div class="hint" style="color:var(--danger);background:#fbeaea">⚠️ 今日总支出已超出预算 '+fmtRM(dayOut-db)+'，请注意控制！</div>':''}
+  </div>
+  <div class="card">
+    <h2>💰 每周总预算 <span class="tag">${mon} 起</span></h2>
+    <label class="fld"><span class="lb">本周总预算(RM)</span>
+      <div class="rm-input"><input type="number" step="0.01" id="b_week" value="${wb}" onchange="DB.budgets.weekly=parseFloat(this.value)||0;autoSave();render()"></div></label>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">已支出</div><div class="v out" style="${wOver?'color:var(--danger)':''}">${fmtRM(weekOut)}</div></div>
+      <div class="stat"><div class="mini">预算</div><div class="v">${fmtRM(wb)}</div></div>
+      <div class="stat"><div class="mini">剩余</div><div class="v" style="${wOver?'color:var(--danger)':''}">${fmtRM(wb-weekOut)}</div></div>
+    </div>
+    ${wOver?'<div class="hint" style="color:var(--danger);background:#fbeaea">⚠️ 本周总支出已超出预算 '+fmtRM(weekOut-wb)+'，请注意控制！</div>':''}
+  </div>
+  <div class="card">
+    <h2>💰 每月总预算 <span class="tag">${ym}</span></h2>
+    <label class="fld"><span class="lb">本月总预算(RM)</span>
+      <div class="rm-input"><input type="number" step="0.01" id="b_month" value="${mb}" onchange="DB.budgets.monthly=parseFloat(this.value)||0;autoSave();render()"></div></label>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">已支出</div><div class="v out" style="${over?'color:var(--danger)':''}">${fmtRM(monthOut)}</div></div>
+      <div class="stat"><div class="mini">预算</div><div class="v">${fmtRM(mb)}</div></div>
+      <div class="stat"><div class="mini">剩余</div><div class="v" style="${over?'color:var(--danger)':''}">${fmtRM(mb-monthOut)}</div></div>
+    </div>
+    ${over?'<div class="hint" style="color:var(--danger);background:#fbeaea">⚠️ 本月总支出已超出预算 '+fmtRM(monthOut-mb)+'，请注意控制！</div>':''}
+  </div>
+  <div class="card">
+    <h2>📂 分类预算（超支自动标红）</h2>
+    ${rows}
+  </div>`;
+}
+function setCatBudget(c,val){ DB.budgets.cat[c]=parseFloat(val)||0; autoSave(); }
+function bindBudget(){}
+
+/* ============ 模块：选项库 ============ */
+function viewLibrary(){
+  const grp=(t,arr)=>`<div class="lib-group"><div class="lg-t">${t}</div><div class="chips">${arr.map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div></div>`;
+  return `
+  <div class="card">
+    <h2>📋 固定下拉选项库</h2>
+    <div class="muted" style="margin-bottom:10px">已全部内置，录入时直接选择，不自定义新词，账目更规整。</div>
+    ${grp('1. 收支类型',OPTIONS.incomeTypes)}
+    ${grp('2. 收入分类（仅收入时选，含「借款」为流入）',OPTIONS.incomeCats)}
+    ${grp('3. 支出分类（仅支出时选，含「借出/还款」为流出）',OPTIONS.expenseCats)}
+    ${grp('4. 成员',OPTIONS.members)}
+    ${grp('5. 消费地点',OPTIONS.locations)}
+    ${grp('6. 支付方式',OPTIONS.payMethods)}
+    ${grp('7. 交易类型',OPTIONS.txnTypes)}
+  </div>
+  <div class="card">
+    <h2>💡 记账规范说明</h2>
+    <div class="hint" style="margin-bottom:0">
+      • 金额统一填写纯数字，货币单位默认 <b>RM</b>，无需符号，方便统计汇总<br>
+      • 无单号的消费，单号栏统一填：无<br>
+      • 所有分类严格按选项库选择，不自定义新词<br>
+      • 日常小额、线上网购、人情往来、固定账单统一录入本表<br>
+      • <b>借款</b> 计为流入（收入侧）；<b>借出 / 还款</b> 计为流出（支出侧）
+    </div>
+  </div>
+  <div class="card">
+    <h2>💡 债务记账规范</h2>
+    <div class="hint" style="margin-bottom:0">
+      • 每月月供还款时，同步录入记账明细表，分类选【车贷/还款】，并选<b>关联债务</b>自动扣本金<br>
+      • 车贷已自动计算：707 × 108 = 76356 RM<br>
+      • KHIND洗衣机 4500RM / 36期，前期月供62.5，后期125<br>
+      • 个人欠款每星期利息100 RM<br>
+      • 债务结清后状态改【已结清】，不再计入月度负债支出<br>
+      • 关联债务后系统按实际还款自动核算剩余本金与期数
+    </div>
+  </div>`;
+}
+
+/* ============ 模块：备份 ============ */
+function viewBackup(){
+  const jsonSize=(JSON.stringify(DB).length/1024).toFixed(1);
+  return `
+  <div class="card">
+    <h2>💾 数据备份与恢复</h2>
+    <div class="hint">${storageOK?'数据已自动保存在本机浏览器（localStorage），刷新/关闭不丢失。建议定期导出备份文件以防万一。':'⚠️ 当前环境无法自动保存！每次改动后请点「导出备份JSON」把文件保存到手机，否则刷新会丢失。'}</div>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">记账笔数</div><div class="v">${DB.records.length}</div></div>
+      <div class="stat"><div class="mini">债务项</div><div class="v">${DB.debts.length}</div></div>
+      <div class="stat"><div class="mini">占用</div><div class="v">${jsonSize}KB</div></div>
+    </div>
+    <div class="muted" style="margin:10px 0 6px">导出（手机点按钮会弹出“分享/保存到文件”，选“存储到文件”或微信发给自己）：</div>
+    <div class="btn-row" style="margin-top:4px;flex-wrap:wrap">
+      <button class="btn" onclick="exportExcel()">📤 导出Excel</button>
+      <button class="btn" onclick="exportJSON()">🗂 导出备份JSON</button>
+      <button class="btn" onclick="exportCSV()">📄 导出CSV</button>
+      <button class="btn" onclick="copyBackupText()">📋 复制为文本</button>
+    </div>
+    <div class="muted" style="margin:12px 0 6px">恢复（导入会<b>覆盖</b>当前全部数据，建议先导出）：</div>
+    <div class="btn-row" style="margin-top:4px">
+      <button class="btn ghost" onclick="document.getElementById('imp').click()">📥 导入恢复</button>
+      <button class="btn ghost danger" onclick="resetAll()">🗑 清空全部</button>
+      <input type="file" id="imp" accept=".json,.csv" style="display:none" onchange="importFile(this)">
+    </div>
+    <div class="muted" style="margin-top:10px">• <b>JSON</b>：完整备份（记账+债务+预算），恢复最可靠，强烈推荐。<br>• <b>Excel/CSV</b>：便于在电脑 Excel 查看或转发，CSV 也可恢复记账明细。</div>
+  </div>`;
+}
+function bindBackup(){}
+
+/* ============ 离线 Excel / 文件 生成（纯 JS，无需联网） ============ */
+function colLetter(n){ let s=''; n=n-1; while(n>=0){ s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26)-1; } return s; }
+function xmlEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function utf8Bytes(str){ return new TextEncoder().encode(str); }
+function crc32(bytes){
+  const table=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); table[n]=c>>>0; }
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++) crc=(crc>>>8)^table[(crc^bytes[i])&0xFF];
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function zipStore(files){
+  const enc=str=>utf8Bytes(str);
+  const u16=n=>[n&0xFF,(n>>>8)&0xFF];
+  const u32=n=>[n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF];
+  const chunks=[], central=[]; let offset=0;
+  for(const f of files){
+    const nameB=enc(f.name), data=f.data, crc=crc32(data);
+    const lh=[].concat(u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameB.length),u16(0));
+    const lhA=new Uint8Array(lh);
+    chunks.push(lhA,nameB,data);
+    const ch=[].concat(u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameB.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset));
+    central.push(new Uint8Array(ch),nameB);
+    offset+=lhA.length+nameB.length+data.length;
+  }
+  let cdSize=0; central.forEach(c=>cdSize+=c.length);
+  const end=[].concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdSize),u32(offset),u16(0));
+  const out=new Uint8Array(offset+cdSize+end.length); let p=0;
+  chunks.forEach(c=>{out.set(c,p);p+=c.length;}); central.forEach(c=>{out.set(c,p);p+=c.length;}); out.set(new Uint8Array(end),p);
+  return new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function rowXML(r,cells){
+  let c='';
+  for(let i=0;i<cells.length;i++){
+    const ref=colLetter(i+1)+r, cell=cells[i];
+    if(cell.t==='n') c+=`<c r="${ref}"><v>${cell.v}</v></c>`;
+    else c+=`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(cell.v)}</t></is></c>`;
+  }
+  return `<row r="${r}">${c}</row>`;
+}
+function sheetXML(headers,rows){
+  let body=rowXML(1,headers.map(h=>({t:'s',v:h})));
+  let r=2;
+  for(const row of rows){ body+=rowXML(r++,row.map(v=>({t:(typeof v==='number'&&isFinite(v))?'n':'s',v:v}))); }
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${body}</sheetData></worksheet>`;
+}
+function buildXLSX(sheets){
+  const files=[], sheetRels=[], wbSheets=[], ctOverride=[];
+  sheets.forEach((s,idx)=>{
+    const n=idx+1;
+    files.push({name:`xl/worksheets/sheet${n}.xml`,data:utf8Bytes(sheetXML(s.headers,s.rows))});
+    sheetRels.push(`<Relationship Id="rId${n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${n}.xml"/>`);
+    wbSheets.push(`<sheet name="${xmlEsc(s.name).slice(0,31)}" sheetId="${n}" r:id="rId${n}"/>`);
+    ctOverride.push(`<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+  });
+  const contentTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${ctOverride.join('')}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`;
+  const rootRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdW" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rIdC" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`;
+  const workbook=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${wbSheets.join('')}</sheets></workbook>`;
+  const wbRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetRels.join('')}</Relationships>`;
+  const core=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>WorkBuddy</dc:creator><cp:lastModifiedBy>WorkBuddy</cp:lastModifiedBy></cp:coreProperties>`;
+  files.push(
+    {name:'[Content_Types].xml',data:utf8Bytes(contentTypes)},
+    {name:'_rels/.rels',data:utf8Bytes(rootRels)},
+    {name:'docProps/core.xml',data:utf8Bytes(core)},
+    {name:'xl/workbook.xml',data:utf8Bytes(workbook)},
+    {name:'xl/_rels/workbook.xml.rels',data:utf8Bytes(wbRels)}
+  );
+  return zipStore(files);
+}
+/* 手机优先用系统分享（可存到“文件”），不支持则尝试下载，再不行复制文本 */
+function shareOrDownload(blob,name){
+  const file=new File([blob],name,{type:blob.type||'application/octet-stream'});
+  if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+    navigator.share({files:[file],title:'工作台数据',text:name}).then(()=>toast('已分享/保存')).catch(()=>{});
+  } else if(navigator.share){
+    navigator.share({title:'工作台数据',text:name}).catch(()=>{});
+  } else {
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(()=>{try{URL.revokeObjectURL(a.href);a.remove();}catch(e){}},2000);
+    toast('已触发下载（若没反应，请用「复制为文本」）');
+  }
+}
+function csvString(){
+  const head=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','关联债务'];
+  const lines=[head.join(',')].concat(DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,debtName(r.linkedDebtId)].map(csvCell).join(',')));
+  return lines.join('\n');
+}
+function exportExcel(){
+  const recHeaders=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','关联债务'];
+  const recRows=DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,debtName(r.linkedDebtId)]);
+  const debtHeaders=['债务名称','总金额','分期期数','月供','已还期数','剩余期数','剩余本金','起始日期','支付方式','状态','备注'];
+  const debtRows=DB.debts.map(d=>{const s=debtStats(d);return [d.name,d.totalAmount,d.installments,d.monthlyPayment,s.paidPeriods,s.remainingPeriods,s.remaining,d.startDate,d.payMethod,d.status,d.note];});
+  const budHeaders=['项目','金额'];
+  const budRows=[['每周总预算',DB.budgets.weekly||0],['每月总预算',DB.budgets.monthly||0]].concat(OPTIONS.expenseCats.filter(c=>DB.budgets.cat[c]).map(c=>['分类:'+c,DB.budgets.cat[c]]));
+  const blob=buildXLSX([
+    {name:'记账明细',headers:recHeaders,rows:recRows},
+    {name:'债务台账',headers:debtHeaders,rows:debtRows},
+    {name:'预算管理',headers:budHeaders,rows:budRows}
+  ]);
+  shareOrDownload(blob,'个人工作台_'+todayStr()+'.xlsx');
+  toast('📤 已生成 Excel（纯离线，无需联网）');
+}
+function exportCSV(){
+  const blob=new Blob(['\ufeff'+csvString()],{type:'text/csv;charset=utf-8'});
+  shareOrDownload(blob,'个人工作台_'+todayStr()+'.csv');
+  toast('📄 已生成 CSV');
+}
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  shareOrDownload(blob,'个人工作台备份_'+todayStr()+'.json');
+  toast('🗂 已导出完整备份 JSON');
+}
+function copyBackupText(){
+  const text='\ufeff'+csvString();
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(()=>toast('✅ 已复制 CSV 文本，可粘贴到微信/备忘录')).catch(()=>fallbackCopy(text)); }
+  else fallbackCopy(text);
+}
+function fallbackCopy(text){
+  const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('✅ 已复制文本'); }catch(e){ toast('复制失败，请手动导出'); }
+  ta.remove();
+}
+function csvCell(v){ v=v==null?'':String(v); if(/[",\n]/.test(v)) return '"'+v.replace(/"/g,'""')+'"'; return v; }
+
+function importFile(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const name=f.name.toLowerCase();
+      if(name.endsWith('.json')){
+        const d=JSON.parse(e.target.result);
+        if(d&&d.records){ DB=d; toast('✅ JSON 备份恢复成功'); }
+        else toast('文件格式不正确');
+      } else {
+        DB.records=parseCSV(e.target.result).map(mapRecRow);
+        toast('✅ CSV 导入成功（仅记账明细，债务请一并导出 JSON）');
+      }
+      autoSave(); render();
+    }catch(err){ console.error(err); toast('导入失败：'+err.message); }
+    input.value='';
+  };
+  reader.readAsText(f,'utf-8');
+}
+function mapRecRow(o){
+  return {id:uid(),date:o['日期']||todayStr(),type:o['收支类型']==='收入'?'收入':'支出',
+    amount:parseFloat(o['金额'])||0,category:o['消费分类']||'',location:o['地点']||'',orderNo:o['单号']||'',
+    payMethod:o['支付方式']||'',txnType:o['交易类型']||'',member:o['成员']||'',
+    borrowFrom:o['借款人']||'',payTo:o['还给谁']||'',note:o['备注']||'',linkedDebtId:''};
+}
+function mapDebtRow(o){
+  return {id:uid(),name:o['债务名称']||'未命名',totalAmount:parseFloat(o['总金额'])||0,
+    installments:parseInt(o['分期期数'])||0,monthlyPayment:parseFloat(o['月供'])||0,
+    startDate:o['起始日期']||'',payMethod:o['支付方式']||'',status:o['状态']||'正常还款',note:o['备注']||''};
+}
+function parseCSV(text){
+  const rows=[]; let i=0,field='',row=[],inQ=false;
+  while(i<text.length){ const c=text[i];
+    if(inQ){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; } else field+=c; }
+    else { if(c==='"') inQ=true; else if(c===','){ row.push(field); field=''; } else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; } else if(c==='\r'){} else field+=c; }
+    i++;
+  }
+  if(field!==''||row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const head=rows[0].map(h=>h.trim());
+  return rows.slice(1).map(r=>{ const o={}; head.forEach((h,k)=>o[h]=r[k]); return o; });
+}
+function resetAll(){ if(!confirm('确定清空全部数据？此操作不可恢复，建议先导出备份！')) return; DB=seed(); autoSave(); render(); toast('已清空'); }
+
+/* ============ 工具 ============ */
+let _toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(_toastT); _toastT=setTimeout(()=>t.classList.remove('show'),1900); }
+
+/* ============ 启动 ============ */
+// 页面隐藏/关闭前尽量落盘一次
+function flushSave(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }catch(e){ storageOK=false; } }
+window.addEventListener('pagehide', flushSave);
+window.addEventListener('beforeunload', flushSave);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') flushSave(); });
+
+renderNav(); render();
+
+/* ============ 云同步（GitHub Gist） ============ */
+/* 数据持久保存在你自己的 GitHub 私密 Gist，多设备/换手机可一键同步。
+   说明：token 仅保存在本机浏览器 localStorage，用于调用 GitHub API，不会上传到任何第三方。
+   建议使用仅勾选 gist 权限的细粒度 token（Settings → Developer settings → Fine-grained PAT）。 */
+const GIST_TOKEN_KEY='__wb_gist_token__';
+const GIST_ID_KEY='__wb_gist_id__';
+const GIST_FILE='workbench-data.json';
+const GIST_DESC='个人工作台云同步数据（自动生成，请勿手动编辑）';
+// 页面默认 token（占位提示，实际保存后优先用本机 localStorage 的值；公开页面源码可见，用毕建议 revoke）
+const DEFAULT_TOKEN=''; // 占位提示：不预填真实 token（避免写入公开仓库源码泄露），请手动粘贴你的 GitHub Token
+
+function openCloud(){
+  const m=document.getElementById('cloudModal');
+  m.classList.add('show');
+  const tk=document.getElementById('cloudToken');
+  tk.value=localStorage.getItem(GIST_TOKEN_KEY)||DEFAULT_TOKEN;
+  const gid=localStorage.getItem(GIST_ID_KEY);
+  const gi=document.getElementById('gistIdInfo');
+  gi.textContent = gid? ('当前绑定 Gist：'+gid) : '尚未绑定 Gist（首次同步会自动创建）';
+  setCloudLog('', '');
+  // 回填当前自定义域名（若有）
+  const dtk=getToken();
+  if(dtk){
+    fetch('https://api.github.com/repos/yukihao5525/Newmyaccountnote-yuki/pages', {
+      headers:{ 'Authorization':'Bearer '+dtk, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' }
+    }).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.cname){ document.getElementById('cloudDomain').value=j.cname; } }).catch(()=>{});
+  }
+}
+function closeCloud(){ document.getElementById('cloudModal').classList.remove('show'); }
+function setCloudLog(msg, cls){ const el=document.getElementById('cloudLog'); el.textContent=msg; el.className='synclog'+(cls?(' '+cls):''); }
+function getToken(){ return localStorage.getItem(GIST_TOKEN_KEY) || DEFAULT_TOKEN; }
+
+async function ghFetch(url, opts){
+  const token=getToken();
+  if(!token){ setCloudLog('❌ 请先填写 GitHub Token', 'err'); return null; }
+  opts=opts||{}; opts.headers=Object.assign({
+    'Authorization':'Bearer '+token,
+    'Accept':'application/vnd.github+json',
+    'Content-Type':'application/json',
+    'X-GitHub-Api-Version':'2022-11-28'
+  }, opts.headers||{});
+  try{
+    const r=await fetch(url, opts);
+    if(!r.ok){
+      let em='';
+      try{ const j=await r.json(); em=j&&j.message? j.message : ''; }catch(e){}
+      setCloudLog('❌ GitHub 返回 '+r.status+(em?('：'+em):'（token 无效或权限不足？）'), 'err');
+      return null;
+    }
+    return await r.json();
+  }catch(e){ setCloudLog('❌ 网络错误：'+e.message, 'err'); return null; }
+}
+
+async function cloudPush(silent){
+  if(!silent) setCloudLog('⏳ 正在上传到云…');
+  const token=getToken();
+  if(!token){ if(!silent) setCloudLog('❌ 请先填写 GitHub Token', 'err'); return; }
+  let gid=localStorage.getItem(GIST_ID_KEY);
+  const payload={ files:{ [GIST_FILE]:{ content: JSON.stringify(DB,null,2) } }, description:GIST_DESC, public:false };
+  let res;
+  if(gid){
+    res=await ghFetch('https://api.github.com/gists/'+gid, {method:'PATCH', body:JSON.stringify(payload)});
+  }else{
+    res=await ghFetch('https://api.github.com/gists', {method:'POST', body:JSON.stringify(payload)});
+    if(res&&res.id){ localStorage.setItem(GIST_ID_KEY, res.id); }
+  }
+  if(res&&res.id){
+    localStorage.setItem(GIST_TOKEN_KEY, token);
+    if(!silent){
+      setCloudLog('✅ 已同步到云端（'+(new Date()).toLocaleString()+'）', 'ok');
+      toast('☁️ 云端同步成功');
+    }
+    updateCloudDot('ok');
+  }else if(!silent){
+    updateCloudDot('err');
+  }
+}
+function updateCloudDot(state){
+  const d=document.getElementById('cloudDot');
+  if(!d) return;
+  d.className='cloud-dot '+(state||'');
+  d.title = state==='ok'?'☁️ 已自动同步到云端' : state==='err'?'☁️ 云同步异常' : '☁️ 云同步未开启';
+}
+
+async function cloudPull(){
+  setCloudLog('⏳ 正在从云端拉取…');
+  const gid=localStorage.getItem(GIST_ID_KEY);
+  const token=getToken();
+  if(!token){ setCloudLog('❌ 请先填写 GitHub Token', 'err'); return; }
+  if(!gid){ setCloudLog('❌ 尚未绑定 Gist，请先「上传到云」一次', 'err'); return; }
+  const res=await ghFetch('https://api.github.com/gists/'+gid);
+  if(!res) return;
+  const f=res.files&&res.files[GIST_FILE];
+  if(!f||!f.content){ setCloudLog('⚠️ 云端暂无数据文件', 'err'); return; }
+  try{
+    const data=JSON.parse(f.content);
+    if(data&&data.records){
+      SUPPRESS_AUTO_CLOUD=true;
+      DB=data;
+      save();
+      SUPPRESS_AUTO_CLOUD=false;
+      renderNav(); render();
+      setCloudLog('✅ 已从云端恢复数据（'+DB.records.length+' 条记账 / '+DB.debts.length+' 笔债务）', 'ok');
+      toast('☁️ 已从云端拉取');
+    }else{ setCloudLog('⚠️ 云端数据格式异常，已忽略', 'err'); }
+  }catch(e){ setCloudLog('❌ 解析云端数据失败：'+e.message, 'err'); }
+}
+
+function cloudSaveToken(){
+  const tk=document.getElementById('cloudToken').value.trim();
+  if(!tk){ setCloudLog('❌ token 不能为空', 'err'); return; }
+  localStorage.setItem(GIST_TOKEN_KEY, tk);
+  setCloudLog('✅ token 已保存到本机浏览器', 'ok');
+}
+function cloudClearBind(){
+  localStorage.removeItem(GIST_ID_KEY);
+  setCloudLog('已解绑 Gist（再次上传将创建新的）', 'ok');
+}
+async function cloudSaveDomain(){
+  const dom=document.getElementById('cloudDomain').value.trim();
+  const token=getToken();
+  if(!token){ setCloudLog('❌ 请先填写并保存 GitHub Token', 'err'); return; }
+  if(!dom){ setCloudLog('❌ 域名不能为空', 'err'); return; }
+  setCloudLog('⏳ 正在设置自定义域名…');
+  const res=await ghFetch('https://api.github.com/repos/yukihao5525/Newmyaccountnote-yuki/pages', {
+    method:'PUT',
+    body:JSON.stringify({ cname: dom, https_enforced:true })
+  });
+  if(res && (res.cname===dom || res.html_url)){
+    setCloudLog('✅ 自定义域名已设置：'+dom+'（请在你的 DNS 添加 CNAME 指向 yukihao5525.github.io）', 'ok');
+    toast('🌐 域名已设置');
+  }
+}
+function cloudClearDomain(){
+  document.getElementById('cloudDomain').value='';
+  setCloudLog('已清空域名输入框；如需取消解析请在 DNS 删除 CNAME 记录', 'ok');
+}
+</script>
+</body>
+</html>
