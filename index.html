@@ -365,14 +365,29 @@ function storageBanner(){
 /* ============ 模块：概览 ============ */
 function viewOverview(){
   const now=todayStr(); const ym=now.slice(0,7); const mon=weekMonday(now);
+  let tInc=0,tOut=0;
+  DB.records.forEach(r=>{ if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
   let wInc=0,wOut=0;
   DB.records.forEach(r=>{ if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
   let mInc=0,mOut=0;
   DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
+  const dayBudget=DB.budgets.daily||0;
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
   return `
+  <div class="card">
+    <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">今日收入</div><div class="v in">${fmtRM(tInc)}</div></div>
+      <div class="stat"><div class="mini">今日支出</div><div class="v out">${fmtRM(tOut)}</div></div>
+      <div class="stat"><div class="mini">实时结余</div><div class="v">${fmtRM(tInc-tOut)}</div></div>
+    </div>
+    ${dayBudget>0? `<div class="stat-grid-2" style="margin-top:10px">
+      <div class="stat"><div class="mini">今日预算</div><div class="v">${fmtRM(dayBudget)}</div></div>
+      <div class="stat"><div class="mini">预算剩余</div><div class="v" style="color:${dayBudget-tOut<0?'var(--danger)':'var(--ok)'}">${fmtRM(dayBudget-tOut)}</div></div>
+    </div>`:''}
+  </div>
   <div class="card">
     <h2>📊 本周收支概览 <span class="tag">${weekRange} · 周一起</span></h2>
     <div class="stat-grid">
