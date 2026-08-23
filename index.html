@@ -17,8 +17,14 @@
     font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
     background:var(--bg); color:var(--ink); font-size:14px; line-height:1.5;
     -webkit-font-smoothing:antialiased;
+    background-image:url('bg-kuromi.jpg');
+    background-size:cover; background-position:center; background-attachment:fixed;
   }
-  .app{display:flex; min-height:100vh; max-width:560px; margin:0 auto; background:var(--bg);}
+  .app{display:flex; min-height:100vh; max-width:560px; margin:0 auto; background:rgba(244,243,247,.78); backdrop-filter:blur(6px);}
+  .overview-hero{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
+  .overview-hero .oh-icon{width:48px; height:48px; border-radius:14px; object-fit:cover; box-shadow:var(--shadow); background:#fff;}
+  .overview-hero .oh-txt h2{margin:0; font-size:15px;}
+  .overview-hero .oh-txt .oh-sub{font-size:11.5px; color:var(--muted);}
   /* left rail */
   .rail{
     width:74px; flex:0 0 74px; background:var(--panel); border-right:1px solid var(--line);
@@ -376,6 +382,13 @@ function viewOverview(){
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
   return `
+  <div class="overview-hero">
+    <img class="oh-icon" src="overview-avatar.jpg" alt="avatar">
+    <div class="oh-txt">
+      <h2>欢迎回来 ✨</h2>
+      <div class="oh-sub">${now} · 记录今天的每一笔</div>
+    </div>
+  </div>
   <div class="card">
     <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
     <div class="stat-grid">
