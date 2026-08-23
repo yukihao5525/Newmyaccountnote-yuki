@@ -6,10 +6,10 @@
 <title>手机端个人专属工作台</title>
 <style>
   :root{
-    --bg:#f4f3f7; --panel:#ffffff; --ink:#3a3a44; --muted:#8d8a99;
-    --line:#ece9f3; --purple:#b9aedc; --purple-soft:#efeaf8; --purple-deep:#8b7fc7;
-    --accent:#a99bdc; --accent-soft:#f3f0fa; --danger:#d96a6a; --ok:#5fa07c;
-    --shadow:0 6px 20px rgba(120,110,160,.10);
+    --bg:transparent; --panel:rgba(40,38,48,.55); --ink:#e9e7ef; --muted:#a7a3b3;
+    --line:rgba(255,255,255,.12); --purple:#b9aedc; --purple-soft:rgba(185,174,220,.16); --purple-deep:#cdbff0;
+    --accent:#c2b8df; --accent-soft:rgba(185,174,220,.16); --danger:#e08a8a; --ok:#7bbf9a;
+    --shadow:0 6px 20px rgba(0,0,0,.28);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0; height:100%;}
@@ -20,9 +20,9 @@
     background-image:url('bg-kuromi.jpg');
     background-size:cover; background-position:center; background-attachment:fixed;
   }
-  .app{display:flex; min-height:100vh; max-width:560px; margin:0 auto; background:rgba(244,243,247,.78); backdrop-filter:blur(6px);}
+  .app{display:flex; min-height:100vh; max-width:560px; margin:0 auto; background:rgba(30,28,38,.45); backdrop-filter:blur(10px);}
   .overview-hero{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
-  .overview-hero .oh-icon{width:48px; height:48px; border-radius:14px; object-fit:cover; box-shadow:var(--shadow); background:#fff;}
+  .overview-hero .oh-icon{width:48px; height:48px; border-radius:14px; object-fit:cover; box-shadow:var(--shadow); background:rgba(255,255,255,.1);}
   .overview-hero .oh-txt h2{margin:0; font-size:15px;}
   .overview-hero .oh-txt .oh-sub{font-size:11.5px; color:var(--muted);}
   /* left rail */
@@ -50,7 +50,7 @@
   .ov-debt .v{font-size:17px; font-weight:700; color:var(--danger); font-variant-numeric:tabular-nums;}
   .ov-debt .lb{font-size:11px; color:var(--purple-deep);}
   .stat-grid-2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-  .debt-paid{background:#f5f0fa; border-radius:14px; padding:12px 14px; margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;}
+  .debt-paid{background:rgba(185,174,220,.12); border-radius:14px; padding:12px 14px; margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:10px 14px;}
   .debt-paid .pi{display:flex; flex-direction:column; gap:4px;}
   .debt-paid .pi .lb{font-size:11px; color:var(--purple-deep);}
   .debt-paid .pi .vv{font-size:15px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;}
@@ -78,12 +78,12 @@
   .save-status{font-size:11px; color:var(--ok);}
   .save-status.pending{color:var(--muted);}
   .btn-save{
-    border:none; background:var(--purple-deep); color:#fff; font-size:12px; font-weight:600;
+    border:none; background:var(--purple-deep); color:#1c1a22; font-size:12px; font-weight:600;
     padding:7px 13px; border-radius:11px; cursor:pointer; box-shadow:var(--shadow);
   }
   .btn-save:active{transform:scale(.96);}
   .scroll{flex:1; overflow-y:auto; padding:14px 14px 40px;}
-  .card{background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:15px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .card{background:rgba(40,38,48,.55); backdrop-filter:blur(8px); border:1px solid var(--line); border-radius:18px; padding:15px; margin-bottom:14px; box-shadow:var(--shadow);}
   .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:7px; color:var(--ink);}
   .card h2 .tag{font-size:10px; font-weight:500; color:var(--purple-deep); background:var(--purple-soft); padding:2px 8px; border-radius:20px;}
   .muted{color:var(--muted); font-size:12px;}
@@ -92,10 +92,10 @@
   label.fld{display:block; margin-bottom:10px;}
   label.fld .lb{display:block; font-size:11px; color:var(--muted); margin-bottom:5px;}
   input,select,textarea{
-    width:100%; border:1px solid var(--line); background:#fbfaff; border-radius:11px;
+    width:100%; border:1px solid var(--line); background:rgba(255,255,255,.06); border-radius:11px;
     padding:10px 11px; font-size:14px; color:var(--ink); font-family:inherit; outline:none; transition:.15s;
   }
-  input:focus,select:focus,textarea:focus{border-color:var(--purple); background:#fff;}
+  input:focus,select:focus,textarea:focus{border-color:var(--purple); background:rgba(255,255,255,.12);}
   .rm-input{position:relative;}
   .rm-input::before{content:"RM"; position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--purple-deep); font-size:12px; font-weight:600; pointer-events:none;}
   .rm-input input{padding-left:34px;}
@@ -104,9 +104,9 @@
     background:var(--purple-soft); color:var(--purple-deep); transition:.15s;
   }
   .btn:active{transform:scale(.97);}
-  .btn.primary{background:var(--purple-deep); color:#fff; box-shadow:var(--shadow); width:100%;}
+  .btn.primary{background:var(--purple-deep); color:#1c1a22; box-shadow:var(--shadow); width:100%;}
   .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--muted);}
-  .btn.danger{background:#fbeaea; color:var(--danger);}
+  .btn.danger{background:rgba(224,138,138,.18); color:var(--danger);}
   .btn.sm{padding:7px 11px; font-size:12px; border-radius:10px;}
   .btn-row{display:flex; gap:9px; margin-top:4px;}
   table{width:100%; border-collapse:collapse; font-size:12.5px;}
@@ -117,10 +117,10 @@
   .income .rm{color:var(--ok);}
   .expense .rm{color:var(--danger);}
   .pill{display:inline-block; font-size:10.5px; padding:2px 8px; border-radius:20px; background:var(--accent-soft); color:var(--purple-deep);}
-  .pill.gray{background:#f0eef5; color:var(--muted);}
-  .pill.ok{background:#e9f4ee; color:var(--ok);}
-  .pill.danger{background:#fbeaea; color:var(--danger);}
-  .template{background:#faf9fe; border:1px dashed var(--purple); border-radius:12px; padding:11px; font-size:12px; color:var(--muted); word-break:break-all; line-height:1.7;}
+  .pill.gray{background:rgba(255,255,255,.12); color:var(--muted);}
+  .pill.ok{background:rgba(123,191,154,.18); color:var(--ok);}
+  .pill.danger{background:rgba(224,138,138,.2); color:var(--danger);}
+  .template{background:rgba(255,255,255,.06); border:1px dashed var(--purple); border-radius:12px; padding:11px; font-size:12px; color:var(--muted); word-break:break-all; line-height:1.7;}
   .copy-btn{margin-top:8px;}
   .stat-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
   .stat{background:var(--accent-soft); border-radius:14px; padding:12px 10px; text-align:center;}
@@ -130,7 +130,7 @@
   .legend{display:flex; flex-wrap:wrap; gap:7px 12px; margin-top:10px; font-size:11.5px;}
   .legend span{display:flex; align-items:center; gap:5px; color:var(--muted);}
   .legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
-  .debt-card{border:1px solid var(--line); border-radius:16px; padding:13px; margin-bottom:12px; background:#fcfbff;}
+  .debt-card{border:1px solid var(--line); border-radius:16px; padding:13px; margin-bottom:12px; background:rgba(40,38,48,.5);}
   .debt-card.done{opacity:.72;}
   .debt-title{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
   .debt-title b{font-size:14px;}
@@ -139,43 +139,43 @@
   .mini{font-size:11px; color:var(--muted); margin-bottom:3px; display:block;}
   .budget-row{display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line);}
   .budget-row.over .bv{color:var(--danger); font-weight:700;}
-  .bar{height:8px; border-radius:6px; background:#eee9f5; overflow:hidden; margin-top:4px;}
+  .bar{height:8px; border-radius:6px; background:rgba(255,255,255,.12); overflow:hidden; margin-top:4px;}
   .bar > i{display:block; height:100%; background:var(--purple);}
   .bar > i.over{background:var(--danger);}
   .lib-group{margin-bottom:12px;}
   .lib-group .lg-t{font-size:12px; font-weight:700; color:var(--purple-deep); margin-bottom:6px;}
   .chips{display:flex; flex-wrap:wrap; gap:6px;}
-  .chip{font-size:11.5px; background:#f3f0fa; color:var(--purple-deep); padding:4px 10px; border-radius:20px;}
+  .chip{font-size:11.5px; background:rgba(185,174,220,.16); color:var(--purple-deep); padding:4px 10px; border-radius:20px;}
   .empty{text-align:center; color:var(--muted); font-size:13px; padding:24px 0;}
   .toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:#3a3a44; color:#fff; padding:11px 18px; border-radius:14px; font-size:13px; opacity:0; transition:.25s; z-index:50; pointer-events:none; box-shadow:var(--shadow);}
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
-  .hint{background:var(--accent-soft); border-radius:12px; padding:11px 13px; font-size:12px; color:#6f6398; line-height:1.7; margin-bottom:12px;}
-  .banner{background:#fdeaea; border:1px solid #f3c2c2; color:#c14b4b; border-radius:12px; padding:11px 13px; font-size:12.5px; line-height:1.7; margin-bottom:12px;}
+  .hint{background:var(--accent-soft); border-radius:12px; padding:11px 13px; font-size:12px; color:var(--purple-deep); line-height:1.7; margin-bottom:12px;}
+  .banner{background:rgba(193,75,75,.16); border:1px solid rgba(193,75,75,.4); color:#f0a8a8; border-radius:12px; padding:11px 13px; font-size:12.5px; line-height:1.7; margin-bottom:12px;}
   .banner b{color:#a83535;}
   .hint b{color:var(--purple-deep);}
-  .seg{display:flex; background:#efeaf8; border-radius:12px; padding:4px; gap:4px;}
+  .seg{display:flex; background:rgba(255,255,255,.08); border-radius:12px; padding:4px; gap:4px;}
   .seg button{flex:1; border:none; background:transparent; padding:9px; border-radius:9px; font-size:13px; color:var(--muted); font-weight:600; cursor:pointer;}
-  .seg button.on{background:#fff; color:var(--purple-deep); box-shadow:var(--shadow);}
+  .seg button.on{background:var(--purple-deep); color:#1c1a22; box-shadow:var(--shadow);}
   .link-line{font-size:11.5px; color:var(--purple-deep); margin-top:6px;}
   .scrollt{font-size:11px; color:var(--muted); margin:2px 0 8px;}
   .barwrap{margin:7px 0;}
   .barwrap .bl{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted);}
   /* 云同步 */
   .btn-cloud{margin-left:8px; border:1px solid var(--purple); background:var(--purple-soft); color:var(--purple-deep); border-radius:10px; padding:6px 11px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:6px;}
-  .cloud-dot{width:8px; height:8px; border-radius:50%; background:#cfc8e6; display:inline-block;}
+  .cloud-dot{width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.4); display:inline-block;}
   .cloud-dot.ok{background:var(--ok);} .cloud-dot.err{background:var(--danger);}
   .modal-mask{position:fixed; inset:0; background:rgba(40,36,56,.42); display:none; align-items:center; justify-content:center; z-index:60; padding:16px;}
   .modal-mask.show{display:flex;}
-  .modal{background:#fff; border-radius:18px; width:100%; max-width:420px; padding:18px; box-shadow:var(--shadow); max-height:86vh; overflow-y:auto;}
+  .modal{background:rgba(36,34,44,.92); backdrop-filter:blur(14px); border:1px solid var(--line); border-radius:18px; width:100%; max-width:420px; padding:18px; box-shadow:var(--shadow); max-height:86vh; overflow-y:auto; color:var(--ink);}
   .modal h2{font-size:16px; margin:0 0 6px; display:flex; align-items:center; gap:6px;}
   .modal .mc{font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:12px;}
-  .modal label{display:block; font-size:12px; color:var(--purple-deep); font-weight:700; margin:10px 0 4px;}
-  .modal input[type=password], .modal input[type=text]{width:100%; border:1px solid var(--line); border-radius:10px; padding:10px; font-size:13px; box-sizing:border-box;}
+  .modal label{display:block; font-size:12px; color:var(--purple); font-weight:700; margin:10px 0 4px;}
+  .modal input[type=password], .modal input[type=text]{width:100%; border:1px solid var(--line); border-radius:10px; padding:10px; font-size:13px; box-sizing:border-box; background:rgba(255,255,255,.08); color:var(--ink);}
   .modal .btn-row{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;}
   .modal .btn{flex:1; min-width:120px; border:none; border-radius:12px; padding:11px; font-size:13px; font-weight:700; cursor:pointer;}
-  .modal .btn.primary{background:var(--purple); color:#fff;}
+  .modal .btn.primary{background:var(--purple-deep); color:#1c1a22;}
   .modal .btn.ghost{background:var(--accent-soft); color:var(--purple-deep);}
-  .modal .btn.warn{background:#fdeaea; color:#c14b4b;}
+  .modal .btn.warn{background:rgba(224,138,138,.2); color:#f0a8a8;}
   .modal .synclog{font-size:11.5px; color:var(--muted); margin-top:12px; min-height:18px; line-height:1.6;}
   .modal .synclog.ok{color:var(--ok);}
   .modal .synclog.err{color:var(--danger);}
@@ -771,7 +771,7 @@ function viewStats(){
   const palette=['#b9aedc','#cdbbe6','#a99bdc','#d9d2ea','#9b8fc9','#e0daf0','#8b7fc7','#cabff0','#b3a7d6','#ddd6ee','#7d6fbf','#e6e1f3','#a892d8','#c2b3e8'];
   let acc=0, grads=[];
   catArr.forEach((c,idx)=>{ const pct=totalCat? (c.v/totalCat*100):0; grads.push(`${palette[idx%palette.length]} ${acc.toFixed(2)}% ${(acc+pct).toFixed(2)}%`); acc+=pct; });
-  const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:#eee9f5';
+  const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:rgba(255,255,255,.1)';
   const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : '<span class="muted">本月暂无支出</span>';
 
   const bars=Object.entries(months).map(([m,v])=>{
@@ -872,7 +872,7 @@ function viewBudget(){
       <div class="stat"><div class="mini">今日预算</div><div class="v">${fmtRM(db)}</div></div>
       <div class="stat"><div class="mini">剩余</div><div class="v" style="${dOver?'color:var(--danger)':''}">${fmtRM(db-dayOut)}</div></div>
     </div>
-    ${dOver?'<div class="hint" style="color:var(--danger);background:#fbeaea">⚠️ 今日总支出已超出预算 '+fmtRM(dayOut-db)+'，请注意控制！</div>':''}
+    ${dOver?'<div class="hint" style="color:#f0a8a8;background:rgba(224,138,138,.18)">⚠️ 今日总支出已超出预算 '+fmtRM(dayOut-db)+'，请注意控制！</div>':''}
   </div>
   <div class="card">
     <h2>💰 每周总预算 <span class="tag">${mon} 起</span></h2>
@@ -883,7 +883,7 @@ function viewBudget(){
       <div class="stat"><div class="mini">预算</div><div class="v">${fmtRM(wb)}</div></div>
       <div class="stat"><div class="mini">剩余</div><div class="v" style="${wOver?'color:var(--danger)':''}">${fmtRM(wb-weekOut)}</div></div>
     </div>
-    ${wOver?'<div class="hint" style="color:var(--danger);background:#fbeaea">⚠️ 本周总支出已超出预算 '+fmtRM(weekOut-wb)+'，请注意控制！</div>':''}
+    ${wOver?'<div class="hint" style="color:#f0a8a8;background:rgba(224,138,138,.18)">⚠️ 本周总支出已超出预算 '+fmtRM(weekOut-wb)+'，请注意控制！</div>':''}
   </div>
   <div class="card">
     <h2>💰 每月总预算 <span class="tag">${ym}</span></h2>
@@ -894,7 +894,7 @@ function viewBudget(){
       <div class="stat"><div class="mini">预算</div><div class="v">${fmtRM(mb)}</div></div>
       <div class="stat"><div class="mini">剩余</div><div class="v" style="${over?'color:var(--danger)':''}">${fmtRM(mb-monthOut)}</div></div>
     </div>
-    ${over?'<div class="hint" style="color:var(--danger);background:#fbeaea">⚠️ 本月总支出已超出预算 '+fmtRM(monthOut-mb)+'，请注意控制！</div>':''}
+    ${over?'<div class="hint" style="color:#f0a8a8;background:rgba(224,138,138,.18)">⚠️ 本月总支出已超出预算 '+fmtRM(monthOut-mb)+'，请注意控制！</div>':''}
   </div>
   <div class="card">
     <h2>📂 分类预算（超支自动标红）</h2>
