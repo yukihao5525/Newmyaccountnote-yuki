@@ -555,7 +555,7 @@ function viewOverview(){
   const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const fundCards=visibleFundAccounts().map(a=>({label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, v:acctBal[a.id]||0}));
-  fundCards.push({label:plLabel, v:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)});
+  fundCards.push({label:plLabel, v:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)+' · 可用 '+fmtRM(Math.max(0,payLaterLimit-payLaterRemain))});
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
@@ -884,6 +884,11 @@ function debtCardHTML(d){
         <div class="vv" style="color:${done?'var(--ok)':'var(--danger)'}">${fmtRM(s.remaining)}</div>
         <span class="manual-hint">= 总金额 ${fmtRM(d.totalAmount||0)} − 已还</span>
       </div>
+      ${isPayLaterDebt(d)?`<div class="pi">
+        <span class="lb">💳 可用额度</span>
+        <div class="vv" style="color:var(--ok)">${fmtRM(Math.max(0,(Number(d.totalAmount)||0)-s.remaining))}</div>
+        <span class="manual-hint">= 额度 ${fmtRM(d.totalAmount||0)} − 剩余待还 ${fmtRM(s.remaining)}</span>
+      </div>`:''}
       <div class="pi">
         <span class="lb">🔁 已还款期数</span>
         <div class="vv">${s.paidPeriods} 期</div>
@@ -1030,7 +1035,7 @@ function viewStats(){
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const acctBal=computeAccountBalances();
   const pmStat=visibleFundAccounts().map(a=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
-  pmStat.push({label:plLabel, i:0, o:0, bal:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)});
+  pmStat.push({label:plLabel, i:0, o:0, bal:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)+' · 可用 '+fmtRM(Math.max(0,payLaterLimit-payLaterRemain))});
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
   const bars=Object.entries(months).map(([m,v])=>{
     const tot=v.inc+v.out; const h=(tot/maxM*100);
