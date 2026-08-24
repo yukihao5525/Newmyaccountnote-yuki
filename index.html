@@ -236,7 +236,8 @@
 const OPTIONS = {
   incomeTypes:['收入','支出'],
   incomeCats:['工资','奖金','兼职','理财收益','红包','其他收入','借款'],
-  expenseCats:['餐饮','交通','购物','孩子','电子烟','香烟','瓜果蔬菜','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','生计用品','家庭用品','日常用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
+  expenseCats:['餐饮','资金转账','交通','购物','孩子','电子烟','香烟','瓜果蔬菜','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','生计用品','家庭用品','日常用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
+  items:['面包','蛋糕','冰淇淋','零食','粿条汤','云吞面','爪哇面','炒粿条','意大利面','Nugget','炸鸡','薯条','炒饭','鸡饭','碟仔饭','韩式饭/面','经济饭','Nasi Lemak','Laksa','文具','服装（衣裤鞋袜/内衣裤）','卫生棉','蔬菜','鸡肉','猪肉','海鲜（鱼/虾/蟹）','零件','五金件','车载用品','厨房用品'],
   members:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','母女仨','家婆','妹妹','爸爸','妈妈','叔叔','朋友'],
   locations:['28间','二街','长城咖啡店','77咖啡店','百福叻沙','家园咖啡店','中兴咖啡店','国记点心','45菜市场','LOTUS','ECONSAVE','HASANI BOOK','ECO','MR DIY','EASY HOME','UTC巴刹','老街场','UTC','MIXUE蜜雪','TAMAN KELADI','TAMAN INTAN','其他'],
   payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
@@ -480,7 +481,7 @@ function viewOverview(){
 /* ============ 模块：快速记账 ============ */
 function viewQuick(){
   const ed = editingId? DB.records.find(r=>r.id===editingId) : null;
-  const rec = ed || {date:todayStr(),type:'支出',amount:'',category:'',location:'',note:'',orderNo:'',payMethod:'',txnType:'',member:'',linkedDebtId:'',borrowFrom:'',payTo:''};
+  const rec = ed || {date:todayStr(),type:'支出',amount:'',category:'',location:'',note:'',orderNo:'',payMethod:'',txnType:'',member:'',linkedDebtId:'',borrowFrom:'',payTo:'',item:'',transferFrom:'',transferTo:''};
   const cats = rec.type==='收入'? OPTIONS.incomeCats : OPTIONS.expenseCats;
   const catOpts = cats.map(c=>`<option ${c===rec.category?'selected':''}>${c}</option>`).join('');
   const memOpts = OPTIONS.members.map(m=>`<option ${m===rec.member?'selected':''}>${m}</option>`).join('');
@@ -515,6 +516,10 @@ function viewQuick(){
       <label class="fld"><span class="lb">地点</span><select id="f_location">${locOpts}</select></label>
       <label class="fld"><span class="lb">单号（无则留空）</span><input id="f_orderNo" value="${esc(rec.orderNo)}" placeholder="无"></label>
     </div>
+    <label class="fld"><span class="lb">物品（可选：下拉选常用或手写）</span>
+      <input id="f_item" list="itemSuggest" value="${esc(rec.item||'')}" placeholder="如：面包 / 蔬菜 / 手写">
+    </label>
+    <datalist id="itemSuggest">${OPTIONS.items.map(i=>`<option>${esc(i)}</option>`).join('')}</datalist>
     <div class="row">
       <label class="fld"><span class="lb">支付方式</span><select id="f_pay">${payOpts}</select></label>
       <label class="fld"><span class="lb">交易类型</span><select id="f_txn">${txnOpts}</select></label>
@@ -524,6 +529,11 @@ function viewQuick(){
       <label class="fld" id="f_debtwrap"><span class="lb">关联债务（还款自动扣本金）</span><select id="f_debt">${debtOpts}</select></label>
     </div>
     <label class="fld" id="f_partywrap" style="display:none"><span class="lb" id="f_party_lb">借款人</span><input id="f_party" value="${esc(rec.borrowFrom||rec.payTo||'')}" placeholder=""></label>
+    <div class="row" id="f_transferwrap" style="display:none">
+      <label class="fld"><span class="lb">转账人（可选）</span><input id="f_transferFrom" list="memberSuggest" value="${esc(rec.transferFrom||'')}" placeholder="成员库选或手写或留空"></label>
+      <label class="fld"><span class="lb">转账给谁（可选）</span><input id="f_transferTo" list="memberSuggest" value="${esc(rec.transferTo||'')}" placeholder="成员库选或手写或留空"></label>
+    </div>
+    <datalist id="memberSuggest">${OPTIONS.members.map(m=>`<option>${esc(m)}</option>`).join('')}</datalist>
     <label class="fld"><span class="lb">备注</span><input id="f_note" value="${esc(rec.note)}" placeholder="选填"></label>
     <div class="btn-row">
       <button class="btn primary" onclick="submitRecord()">${ed?'保存修改':'添加记录'}</button>
@@ -559,6 +569,15 @@ function rebindParty(){
   } else {
     wrap.style.display='none'; inp.value='';
   }
+  // 资金转账：显示 转账人 / 转账给谁
+  const twrap=document.getElementById('f_transferwrap');
+  if(cat==='资金转账'){
+    twrap.style.display='flex';
+  } else {
+    twrap.style.display='none';
+    document.getElementById('f_transferFrom').value='';
+    document.getElementById('f_transferTo').value='';
+  }
 }
 function copyTpl(){
   const t=document.getElementById('tplText').innerText;
@@ -578,18 +597,21 @@ function submitRecord(){
   const partyVal=(document.getElementById('f_party')||{value:''}).value.trim();
   const borrowFrom = (type==='收入' && category==='借款') ? partyVal : '';
   const payTo      = (type==='支出' && (category==='借出' || category==='还款')) ? partyVal : '';
+  const transferFrom = category==='资金转账' ? (document.getElementById('f_transferFrom')||{value:''}).value.trim() : '';
+  const transferTo   = category==='资金转账' ? (document.getElementById('f_transferTo')||{value:''}).value.trim() : '';
   const rec={
     date:document.getElementById('f_date').value||todayStr(),
     type, amount:amount,
     category,
     location:document.getElementById('f_location').value,
     orderNo:document.getElementById('f_orderNo').value.trim(),
+    item:(document.getElementById('f_item')||{value:''}).value.trim(),
     payMethod:document.getElementById('f_pay').value,
     txnType:document.getElementById('f_txn').value,
     member:document.getElementById('f_member').value,
     note:document.getElementById('f_note').value.trim(),
     linkedDebtId:linkedDebtId||'',
-    borrowFrom, payTo
+    borrowFrom, payTo, transferFrom, transferTo
   };
   if(editingId){ const i=DB.records.findIndex(r=>r.id===editingId); DB.records[i]={...DB.records[i],...rec}; editingId=null; toast('已保存修改'); }
   else { rec.id=uid(); DB.records.unshift(rec); toast('✅ 已添加记录'); }
@@ -604,11 +626,12 @@ function viewDetail(){
   let body = rows.length? rows.map(r=>{
     const cls=r.type==='收入'?'income':'expense';
     const partyLine = r.borrowFrom? `<br><span class="muted">← ${esc(r.borrowFrom)}</span>` : (r.payTo? `<br><span class="muted">→ ${esc(r.payTo)}</span>` : '');
+    const transferLine = (r.transferFrom||r.transferTo)? `<br><span class="muted">💸 ${esc(r.transferFrom||'')}→${esc(r.transferTo||'')}</span>` : '';
     return `<tr class="${cls}">
       <td>${esc(r.date)}<br><span class="muted">${esc(r.member)}</span></td>
-      <td><span class="pill ${r.type==='收入'?'ok':'gray'}">${r.type}</span><br><span class="pill">${esc(r.category)}</span>${partyLine}</td>
+      <td><span class="pill ${r.type==='收入'?'ok':'gray'}">${r.type}</span><br><span class="pill">${esc(r.category)}</span>${partyLine}${transferLine}</td>
       <td class="amt"><span class="rm">${fmtRM(r.amount)}</span>${r.linkedDebtId?'<br><span class="pill gray">🔗'+esc(debtName(r.linkedDebtId))+'</span>':''}</td>
-      <td><span class="muted">${esc(r.location||'')}</span>${r.orderNo?'<br><span class="muted">#'+esc(r.orderNo)+'</span>':''}</td>
+      <td><span class="muted">${esc(r.location||'')}</span>${r.orderNo?'<br><span class="muted">#'+esc(r.orderNo)+'</span>':''}${r.item?'<br><span class="muted">🛒 '+esc(r.item)+'</span>':''}</td>
       <td>
         <button class="btn sm" onclick="editRecord('${r.id}')">改</button>
         <button class="btn sm danger" onclick="delRecord('${r.id}')">删</button>
@@ -618,9 +641,9 @@ function viewDetail(){
   return `
   <div class="card">
     <h2>📑 完整记账录入明细表 <span class="tag">共 ${rows.length} 笔</span></h2>
-    <div class="muted" style="margin-bottom:8px">字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜支付方式｜交易类型｜成员｜借款人/还给谁｜备注｜关联债务</div>
+    <div class="muted" style="margin-bottom:8px">字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜物品｜支付方式｜交易类型｜成员｜借款人/还给谁｜转账人/转账给谁｜备注｜关联债务</div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>日期/成员</th><th>类型/分类</th><th>金额</th><th>地点/单号</th><th>操作</th></tr></thead>
+      <thead><tr><th>日期/成员</th><th>类型/分类</th><th>金额</th><th>地点/单号/物品</th><th>操作</th></tr></thead>
       <tbody>${body}</tbody>
     </table></div>
     <button class="btn primary" style="margin-top:12px" onclick="go('quick')">➕ 新增一笔</button>
@@ -976,6 +999,7 @@ function viewLibrary(){
     ${grp('5. 消费地点',OPTIONS.locations)}
     ${grp('6. 支付方式',OPTIONS.payMethods)}
     ${grp('7. 交易类型',OPTIONS.txnTypes)}
+    ${grp('8. 常用物品（「物品」字段可选，下拉选或手写）',OPTIONS.items)}
   </div>
   <div class="card">
     <h2>💡 记账规范说明</h2>
@@ -1119,13 +1143,13 @@ function shareOrDownload(blob,name){
   }
 }
 function csvString(){
-  const head=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','关联债务'];
-  const lines=[head.join(',')].concat(DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,debtName(r.linkedDebtId)].map(csvCell).join(',')));
+  const head=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','物品','转账人','转账给谁','关联债务'];
+  const lines=[head.join(',')].concat(DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,r.item||'',r.transferFrom||'',r.transferTo||'',debtName(r.linkedDebtId)].map(csvCell).join(',')));
   return lines.join('\n');
 }
 function exportExcel(){
-  const recHeaders=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','关联债务'];
-  const recRows=DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,debtName(r.linkedDebtId)]);
+  const recHeaders=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','物品','转账人','转账给谁','关联债务'];
+  const recRows=DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,r.item||'',r.transferFrom||'',r.transferTo||'',debtName(r.linkedDebtId)]);
   const debtHeaders=['债务名称','总金额','分期期数','月供','已还期数','剩余期数','剩余本金','起始日期','支付方式','状态','备注'];
   const debtRows=DB.debts.map(d=>{const s=debtStats(d);return [d.name,d.totalAmount,d.installments,d.monthlyPayment,s.paidPeriods,s.remainingPeriods,s.remaining,d.startDate,d.payMethod,d.status,d.note];});
   const budHeaders=['项目','金额'];
@@ -1183,8 +1207,9 @@ function importFile(input){
 function mapRecRow(o){
   return {id:uid(),date:o['日期']||todayStr(),type:o['收支类型']==='收入'?'收入':'支出',
     amount:parseFloat(o['金额'])||0,category:o['消费分类']||'',location:o['地点']||'',orderNo:o['单号']||'',
-    payMethod:o['支付方式']||'',txnType:o['交易类型']||'',member:o['成员']||'',
-    borrowFrom:o['借款人']||'',payTo:o['还给谁']||'',note:o['备注']||'',linkedDebtId:''};
+    item:o['物品']||'',payMethod:o['支付方式']||'',txnType:o['交易类型']||'',member:o['成员']||'',
+    borrowFrom:o['借款人']||'',payTo:o['还给谁']||'',note:o['备注']||'',
+    transferFrom:o['转账人']||'',transferTo:o['转账给谁']||'',linkedDebtId:''};
 }
 function mapDebtRow(o){
   return {id:uid(),name:o['债务名称']||'未命名',totalAmount:parseFloat(o['总金额'])||0,
