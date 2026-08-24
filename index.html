@@ -243,15 +243,15 @@
 /* ============ 选项库（已全部内置） ============ */
 const OPTIONS = {
   incomeTypes:['收入','支出'],
-  incomeCats:['工资','奖金','兼职','理财收益','红包','其他收入','借款'],
-  expenseCats:['餐饮','资金转账','交通','购物','孩子','电子烟','香烟','瓜果蔬菜','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','生计用品','家庭用品','日常用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
+  incomeCats:['工资','奖金','兼职','理财收益','红包','其他收入','借款','小说收益','档口收益','资金转账','买卖'],
+  expenseCats:['餐饮','资金转账','交通','购物','孩子','电子烟','香烟','瓜果蔬菜','利息','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','生计用品','家庭用品','日常用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
   items:['面包','蛋糕','冰淇淋','零食','粿条汤','云吞面','爪哇面','炒粿条','意大利面','Nugget','炸鸡','薯条','炒饭','鸡饭','碟仔饭','韩式饭/面','经济饭','Nasi Lemak','Laksa','文具','服装（衣裤鞋袜/内衣裤）','卫生棉','蔬菜','鸡肉','猪肉','海鲜（鱼/虾/蟹）','零件','五金件','车载用品','厨房用品'],
   members:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','母女仨','家婆','妹妹','爸爸','妈妈','叔叔','朋友'],
   locations:['28间','二街','长城咖啡店','77咖啡店','百福叻沙','家园咖啡店','中兴咖啡店','国记点心','45菜市场','LOTUS','ECONSAVE','HASANI BOOK','ECO','MR DIY','EASY HOME','UTC巴刹','老街场','UTC','MIXUE蜜雪','TAMAN KELADI','TAMAN INTAN','其他'],
   payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
   txnTypes:['CASH','DUITNOW TRANSFER','QR SCAN TRANSFER']
 };
-const STAT_MEMBERS=OPTIONS.members;
+const STAT_MEMBERS=['我自己']; // 统计·成员收支仅保留本人（其他成员仍可在记账时选「谁用了/谁给了钱」）
 const STORE_KEY='mobileWorkbenchDB_v1';
 
 /* ============ 数据层 ============ */
@@ -273,13 +273,14 @@ storageOK = testStorage();
 function load(){
   try{
     const raw=localStorage.getItem(STORE_KEY);
-    if(raw){ const d=JSON.parse(raw); if(d&&d.records){ ensurePayLaterDebt(d); migrateData(d); ensureAccounts(d); return d; } }
+    if(raw){ const d=JSON.parse(raw); if(d&&d.records){ ensurePayLaterDebt(d); migrateData(d); ensureAccounts(d); ensureOpening(d); return d; } }
   }catch(e){ console.warn('load fail',e); }
   return seed();
 }
 function seed(){
   return {
     records:[],
+    _openBalApplied:true, // 新用户：不自动注入期初余额（仅旧数据迁移时补录）
     debts:[
       {id:uid(),name:'KHIND洗衣机',totalAmount:4500,installments:36,monthlyPayment:125,startDate:'2026-06-01',payMethod:'',status:'正常还款',note:'1/6/2026-1/6/2027月供62.5；1/7/2027起月供125'},
       {id:uid(),name:'COWAY饮水机',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'无',note:''},
@@ -290,9 +291,9 @@ function seed(){
     ],
     budgets:{ monthly:0, weekly:0, cat:{} },
     accounts:[
-      {id:uid(),name:'现金',type:'cash',balance:0},
-      {id:uid(),name:'银行 RHB',type:'bank',balance:0},
-      {id:uid(),name:'电子钱包',type:'ewallet',balance:0}
+      {id:uid(),name:'现金',type:'cash',balance:0,opening:0},
+      {id:uid(),name:'银行 RHB',type:'bank',balance:0,opening:0},
+      {id:uid(),name:'电子钱包',type:'ewallet',balance:0,opening:0}
     ],
     counterparties:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','家婆','妹妹','爸爸','妈妈','叔叔','朋友','RHB Bank','Tng Ewallet','Shopee','公司','老板']
   };
@@ -375,19 +376,29 @@ function ensureAccounts(db){
   db=db||DB;
   if(!db.accounts||!Array.isArray(db.accounts)) db.accounts=[];
   const defs=[['现金','cash'],['银行 RHB','bank'],['电子钱包','ewallet']];
-  defs.forEach(([n,t])=>{ if(!db.accounts.some(a=>a.name===n)) db.accounts.push({id:uid(),name:n,type:t}); });
+  defs.forEach(([n,t])=>{ if(!db.accounts.some(a=>a.name===n)) db.accounts.push({id:uid(),name:n,type:t,opening:0}); else { const a=db.accounts.find(x=>x.name===n); if(a.opening==null) a.opening=0; } });
+  // GX Bank 属于电子钱包（非正规银行，类似支付宝/微信、需 top up 才能用）；若曾被误建为银行账户则纠正
+  db.accounts.forEach(a=>{ if(/gx bank/i.test(a.name) && a.type==='bank') a.type='ewallet'; });
   if(!db.counterparties||!Array.isArray(db.counterparties)) db.counterparties=[];
+}
+function ensureOpening(db){
+  db=db||DB;
+  if(db._openBalApplied) return; // 已注入期初余额则跳过
+  // 22/8/2026 以前数据丢失，补录期初余额：现金 3 / 银行RHB 0.78 / 电子钱包(含 GX Bank) 0.11
+  const map={'现金':3,'银行 RHB':0.78,'电子钱包':0.11};
+  db.accounts.forEach(a=>{ if(map[a.name]!=null && (a.opening==null||a.opening===0)) a.opening=map[a.name]; });
+  db._openBalApplied=true;
 }
 function acctName(id){ const a=DB.accounts.find(x=>x.id===id); return a?a.name:''; }
 function acctIdByType(t){ const a=DB.accounts.find(x=>x.type===t); return a?a.id:null; }
 function accountForPayMethod(pm){
   if(!pm||/PayLater/i.test(pm)) return null; // PayLater 由债务模块单独处理
   if(pm==='现金') return acctIdByType('cash');
-  if(/bank/i.test(pm)) return acctIdByType('bank');
-  return acctIdByType('ewallet'); // 其余支付方式（电子钱包类）计入电子钱包
+  if(pm==='RHB Bank') return acctIdByType('bank'); // 仅 RHB Bank 计入「银行」，与电子钱包分离（银行流水不与电子钱包混在一起）
+  return acctIdByType('ewallet'); // 其余（微信/支付宝/Tng/Boost/Grab/Shopee Pay/GX Bank 等）计入电子钱包；GX Bank 属电子钱包、非正规银行
 }
 function computeAccountBalances(){
-  const bal={}; DB.accounts.forEach(a=>bal[a.id]=0);
+  const bal={}; DB.accounts.forEach(a=>bal[a.id]=Number(a.opening)||0); // 期初余额（opening）作为账户起始值
   DB.records.forEach(r=>{
     const amt=Number(r.amount)||0;
     if(r.isTransfer){
@@ -406,7 +417,8 @@ function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;
 /* ============ 债务计算 ============ */
 function debtStats(d){
   const linked=DB.records.filter(r=>r.linkedDebtId===d.id && r.type==='支出');
-  const autoPaidPrincipal=linked.reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const autoPaidPrincipal=linked.filter(r=>r.category!=='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 分类为【利息】的还款不扣本金
+  const autoPaidInterest =linked.filter(r=>r.category==='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 利息合计
   const paidCount=linked.length;
   const total=Number(d.totalAmount)||0;
   // 手动覆盖：未填则用自动值
@@ -415,7 +427,7 @@ function debtStats(d){
   let remaining = total - paidPrincipal;
   if(d.remainingManual!=null && d.remainingManual!=='' && !isNaN(parseFloat(d.remainingManual))) remaining = parseFloat(d.remainingManual);
   let remainingPeriods = (d.installments && d.installments>0) ? Math.max(0, d.installments - paidPeriods) : null;
-  return {paidPrincipal, paidPeriods, remaining:Math.max(0,remaining), remainingPeriods, linkedCount:paidCount, autoPaidPrincipal};
+  return {paidPrincipal, paidPeriods, remaining:Math.max(0,remaining), remainingPeriods, linkedCount:paidCount, autoPaidPrincipal, autoPaidInterest};
 }
 
 /* ============ 渲染：导航 ============ */
@@ -603,7 +615,7 @@ function viewQuick(){
       <label class="fld"><span class="lb">交易类型</span><select id="f_txn">${txnOpts}</select></label>
     </div>
     <div class="row">
-      <label class="fld"><span class="lb">家庭成员</span><select id="f_member">${memOpts}</select></label>
+      <label class="fld"><span class="lb">家庭成员（谁用了这笔钱 / 谁给了钱）</span><select id="f_member">${memOpts}</select></label>
       <label class="fld" id="f_debtwrap"><span class="lb">关联债务（还款自动扣本金）</span><select id="f_debt">${debtOpts}</select></label>
     </div>
     <label class="fld" id="f_payerwrap" style="display:none"><span class="lb">付款方（收入来自谁/哪方，可选）</span><input id="f_payer" list="counterpartySuggest" value="${esc(rec.payer||'')}" placeholder="往来对象库选或手写或留空"></label>
@@ -797,10 +809,15 @@ function debtCardHTML(d){
     </div>
     <div class="debt-paid">
       <div class="pi">
-        <span class="lb">✅ 已还款金额</span>
+        <span class="lb">✅ 已还款金额（本金）</span>
         <div class="vv in">${fmtRM(s.paidPrincipal)}</div>
         <input type="number" step="0.01" placeholder="留空=按关联还款自动" value="${hasPaidOverride?d.paidAmountManual:''}" onchange="updDebt('${d.id}','paidAmountManual',this.value)">
         <span class="manual-hint">${hasPaidOverride?'已手动覆盖':'自动：'+fmtRM(s.autoPaidPrincipal)+'（'+s.linkedCount+'笔）'}</span>
+      </div>
+      <div class="pi">
+        <span class="lb">💸 已付利息</span>
+        <div class="vv">${fmtRM(s.autoPaidInterest)}</div>
+        <span class="manual-hint">分类选【利息】的还款（不扣本金）</span>
       </div>
       <div class="pi">
         <span class="lb">📌 剩余本金</span>
@@ -1007,7 +1024,7 @@ function viewStats(){
   <div class="card">
     <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 小资贷款 / 电子钱包</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
-    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减；在「债务台账」对应卡片修改额度或记录还款即自动联动）；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等及"其他"）均计入电子钱包</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减；在「债务台账」对应卡片修改额度或记录还款即自动联动）；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay / GX Bank 等及"其他"）均计入电子钱包</div>
   </div>
   <div class="card">
     <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
@@ -1101,7 +1118,7 @@ function viewLibrary(){
     ${grp('1. 收支类型',OPTIONS.incomeTypes)}
     ${grp('2. 收入分类（仅收入时选，含「借款」为流入）',OPTIONS.incomeCats)}
     ${grp('3. 支出分类（仅支出时选，含「借出/还款」为流出）',OPTIONS.expenseCats)}
-    ${grp('4. 成员',OPTIONS.members)}
+    ${grp('4. 成员（谁用了这笔钱 / 谁给了钱）',OPTIONS.members)}
     ${grp('5. 消费地点',OPTIONS.locations)}
     ${grp('6. 支付方式',OPTIONS.payMethods)}
     ${grp('7. 交易类型',OPTIONS.txnTypes)}
@@ -1121,6 +1138,7 @@ function viewLibrary(){
     <h2>💡 债务记账规范</h2>
     <div class="hint" style="margin-bottom:0">
       • 每月月供还款时，同步录入记账明细表，分类选【车贷/还款】，并选<b>关联债务</b>自动扣本金<br>
+      • 利息付款：分类选【利息】并选<b>关联债务</b>，系统记为「已付利息」且<b>不扣减本金</b>（本金只由【车贷/还款】类还款扣减）<br>
       • 车贷已自动计算：707 × 108 = 76356 RM<br>
       • KHIND洗衣机 4500RM / 36期，前期月供62.5，后期125<br>
       • 个人欠款每星期利息100 RM<br>
