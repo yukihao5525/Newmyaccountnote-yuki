@@ -382,7 +382,7 @@ function viewOverview(){
   const pmGroups=[
     {label:'💵 现金', test:m=>m==='现金'},
     {label:'🏦 银行', test:m=>m==='RHB Bank'},
-    {label:'📑 小资贷款', test:m=>m==='Ryt PayLater', fixed:500},
+    {label:'📑 小资贷款 (Ryt PayLater)', test:m=>m==='Ryt PayLater', fixed:500},
     {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&m!=='Ryt PayLater'}
   ];
   const pmStat=pmGroups.map(g=>{ if(g.fixed!=null){ return {label:g.label,v:g.fixed}; } let v=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ v+= (r.type==='收入'?1:-1)*(Number(r.amount)||0); } }); return {label:g.label,v}; });
@@ -793,7 +793,7 @@ function viewStats(){
   const pmGroups=[
     {label:'💵 现金', test:m=>m==='现金'},
     {label:'🏦 银行 (RHB)', test:m=>m==='RHB Bank'},
-    {label:'📑 小资贷款', test:m=>m==='Ryt PayLater', fixed:500},
+    {label:'📑 小资贷款 (Ryt PayLater)', test:m=>m==='Ryt PayLater', fixed:500},
     {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&m!=='Ryt PayLater'}
   ];
   const pmStat=pmGroups.map(g=>{ if(g.fixed!=null){ return {label:g.label,i:0,o:0,bal:g.fixed}; } let i=0,o=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:i-o}; });
