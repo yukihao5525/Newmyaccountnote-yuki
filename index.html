@@ -288,7 +288,7 @@ function seed(){
       {id:uid(),name:'车贷 ALZA',totalAmount:76356,installments:108,monthlyPayment:707,startDate:'2024-07-11',payMethod:'',status:'正常还款',note:'月供707×108=76356'},
       {id:uid(),name:'个人欠款',totalAmount:1000,installments:null,monthlyPayment:0,startDate:'',payMethod:'',status:'待结清',note:'每个星期利息100'},
       {id:uid(),name:'Ryt PayLater',kind:'paylater',totalAmount:500,installments:0,monthlyPayment:0,startDate:'',payMethod:'Ryt PayLater',status:'正常还款',note:'小资贷款（PayLater 额度，可在本卡片修改额度/本金，概览与统计自动联动）'},
-      {id:uid(),name:'HONOR',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'正常还款',paidAmountManual:1255,paidPeriodsManual:10,note:'已还 RM1255 / 10期；7月、8月未还款'}
+      {id:uid(),name:'HONOR',totalAmount:2988.70,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'正常还款',paidAmountManual:1255,paidPeriodsManual:10,note:'已还 RM1255 / 10期；7月、8月未还款；总额 RM2988.70'}
     ],
     budgets:{ monthly:0, weekly:0, cat:{} },
     accounts:[
@@ -380,9 +380,10 @@ function ensureHonorDebt(db){
   db=db||DB;
   if(!db.debts) db.debts=[];
   let h=db.debts.find(d=>d.name && d.name.toUpperCase()==='HONOR');
-  if(!h){ h={id:uid(),name:'HONOR',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'正常还款',note:'已还 RM1255 / 10期；7月、8月未还款'}; db.debts.push(h); }
+  if(!h){ h={id:uid(),name:'HONOR',totalAmount:2988.70,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'正常还款',note:'已还 RM1255 / 10期；7月、8月未还款；总额 RM2988.70'}; db.debts.push(h); }
   if(h.paidAmountManual==null||h.paidAmountManual==='') h.paidAmountManual=1255;
   if(h.paidPeriodsManual==null||h.paidPeriodsManual==='') h.paidPeriodsManual=10;
+  if(h.totalAmount==null||h.totalAmount===''||Number(h.totalAmount)===0) h.totalAmount=2988.70; // 总额仅当为空/0时补录，避免覆盖用户手填
 }
 function migrateData(db){
   db=db||DB;
