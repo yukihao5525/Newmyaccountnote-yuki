@@ -308,12 +308,14 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtRM(n){ const v=Number(n)||0; return 'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function debtName(id){ const d=DB.debts.find(x=>x.id===id); return d?d.name:''; }
-// 小资贷款联动：定位 Ryt PayLater 债务（优先按 kind 标记，兼容按名称）
-function getPayLaterDebt(){ return DB.debts.find(d=>d.kind==='paylater') || DB.debts.find(d=>d.name==='Ryt PayLater'); }
+// 小资贷款联动：任意名称含 "PayLater" 的债务都归类为「联动小资贷款」
+function isPayLaterDebt(d){ return !!(d && (d.kind==='paylater' || (d.name && /PayLater/i.test(d.name)))); }
+function getPayLaterDebts(){ return DB.debts.filter(isPayLaterDebt); }
+function getPayLaterDebt(){ return getPayLaterDebts()[0]||null; } // 兼容旧调用（取第一条）
 function ensurePayLaterDebt(db){
   db=db||DB;
   if(!db.debts) db.debts=[];
-  const has=db.debts.some(d=>d.kind==='paylater'||d.name==='Ryt PayLater');
+  const has=db.debts.some(isPayLaterDebt);
   if(!has){ db.debts.push({id:uid(),name:'Ryt PayLater',kind:'paylater',totalAmount:500,installments:0,monthlyPayment:0,startDate:'',payMethod:'Ryt PayLater',status:'正常还款',note:'小资贷款（PayLater 额度，可在本卡片修改额度/本金，概览与统计自动联动）'}); }
 }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -387,16 +389,20 @@ function viewOverview(){
   let mInc=0,mOut=0;
   DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
   const dayBudget=DB.budgets.daily||0;
-  // 资金分布：现金 / 银行(RHB) / 小资贷款(Ryt PayLater 剩余待还本金取自债务台账) / 电子钱包（累计净额 = 收入 - 支出）
-  const payLaterDebt=getPayLaterDebt();
-  const payLaterLimit=payLaterDebt?Number(payLaterDebt.totalAmount)||0:0;
+  // 资金分布：现金 / 银行(RHB) / 小资贷款(PayLater 债务合计剩余待还本金) / 电子钱包（累计净额 = 收入 - 支出）
+  const payLaterDebts=getPayLaterDebts();
+  const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
+  const payLaterPaid=payLaterDebts.reduce((s,d)=>s+debtStats(d).paidPrincipal,0);
+  const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
+  const payLaterPMs=new Set(payLaterDebts.map(d=>d.payMethod).filter(Boolean));
+  const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const pmGroups=[
     {label:'💵 现金', test:m=>m==='现金'},
     {label:'🏦 银行', test:m=>m==='RHB Bank'},
-    {label:'📑 小资贷款 (Ryt PayLater)', test:m=>m==='Ryt PayLater', paylater:true},
-    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&m!=='Ryt PayLater'}
+    {label:plLabel, test:m=>payLaterPMs.has(m), paylater:true},
+    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&!payLaterPMs.has(m)}
   ];
-  const pmStat=pmGroups.map(g=>{ if(g.paylater){ const ds=payLaterDebt?debtStats(payLaterDebt):{remaining:0,paidPrincipal:0}; return {label:g.label, v:ds.remaining, sub:'额度 '+fmtRM(payLaterLimit)+' · 已还 '+fmtRM(ds.paidPrincipal)}; } let v=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ v+= (r.type==='收入'?1:-1)*(Number(r.amount)||0); } }); return {label:g.label,v}; });
+  const pmStat=pmGroups.map(g=>{ if(g.paylater){ return {label:g.label, v:payLaterRemain, sub:'额度 '+fmtRM(payLaterLimit)+' · 已还 '+fmtRM(payLaterPaid)}; } let v=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ v+= (r.type==='收入'?1:-1)*(Number(r.amount)||0); } }); return {label:g.label,v}; });
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
@@ -413,7 +419,7 @@ function viewOverview(){
     <div class="stat-grid-2">
       ${pmStat.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.v<0?'var(--danger)':'var(--ok)'}">${fmtRM(s.v)}</div>${s.sub?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.sub}</div>`:''}</div>`).join('')}
     </div>
-    <div class="muted" style="margin-top:8px;font-size:11px">各渠道累计净流入（收入−支出）；现金=现金，银行=RHB Bank；小资贷款=Ryt PayLater（显示「剩余待还本金」= 额度−已还，随关联还款递减；额度/已还在「债务台账」的 Ryt PayLater 卡片修改），其余支付方式计入电子钱包</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">各渠道累计净流入（收入−支出）；现金=现金，银行=RHB Bank；小资贷款=任意名称带 PayLater 的债务合计（显示「剩余待还本金」= 额度−已还，随关联还款递减；额度/已还在「债务台账」对应卡片修改），其余支付方式计入电子钱包</div>
   </div>
   <div class="card">
     <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
@@ -631,7 +637,7 @@ function debtCardHTML(d){
   const statusPill = done?'<span class="pill ok">已结清</span>': (d.status==='待结清'?'<span class="pill danger">'+esc(d.status)+'</span>':'<span class="pill">'+esc(d.status)+'</span>');
   const hasPaidOverride = (d.paidAmountManual!=null && d.paidAmountManual!=='');
   const hasPeriodOverride = (d.paidPeriodsManual!=null && d.paidPeriodsManual!=='');
-  const linkBadge = (d.kind==='paylater')? '<span class="pill" style="background:rgba(123,97,255,.25);color:#cbbcff;border:1px solid #7b61ff">🔗 联动·小资贷款</span>' : '';
+  const linkBadge = isPayLaterDebt(d)? '<span class="pill" style="background:rgba(123,97,255,.25);color:#cbbcff;border:1px solid #7b61ff">🔗 联动·小资贷款</span>' : '';
   return `<div class="debt-card ${done?'done':''}" data-id="${d.id}">
     <div class="debt-title"><b>${esc(d.name)}</b> ${statusPill} ${linkBadge}</div>
     <div class="debt-fields">
@@ -801,16 +807,19 @@ function viewStats(){
   const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:rgba(255,255,255,.1)';
   const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : '<span class="muted">本月暂无支出</span>';
 
-  // 支付方式现金流分组：现金=现金；银行=RHB Bank；小资贷款=Ryt PayLater(剩余待还本金取自债务台账)；其余=电子钱包
-  const payLaterDebt=getPayLaterDebt();
-  const payLaterLimit=payLaterDebt?Number(payLaterDebt.totalAmount)||0:0;
+  // 支付方式现金流分组：现金=现金；银行=RHB Bank；小资贷款=PayLater 债务合计(剩余待还本金)；其余=电子钱包
+  const payLaterDebts=getPayLaterDebts();
+  const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
+  const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
+  const payLaterPMs=new Set(payLaterDebts.map(d=>d.payMethod).filter(Boolean));
+  const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const pmGroups=[
     {label:'💵 现金', test:m=>m==='现金'},
     {label:'🏦 银行 (RHB)', test:m=>m==='RHB Bank'},
-    {label:'📑 小资贷款 (Ryt PayLater)', test:m=>m==='Ryt PayLater', paylater:true},
-    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&m!=='Ryt PayLater'}
+    {label:plLabel, test:m=>payLaterPMs.has(m), paylater:true},
+    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&!payLaterPMs.has(m)}
   ];
-  const pmStat=pmGroups.map(g=>{ if(g.paylater){ let i=0,o=0; DB.records.forEach(r=>{ if(r.payMethod==='Ryt PayLater'){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); const ds=payLaterDebt?debtStats(payLaterDebt):{remaining:0}; return {label:g.label,i,o,bal:ds.remaining}; } let i=0,o=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:i-o}; });
+  const pmStat=pmGroups.map(g=>{ if(g.paylater){ let i=0,o=0; DB.records.forEach(r=>{ if(payLaterPMs.has(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:payLaterRemain}; } let i=0,o=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:i-o}; });
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
   const bars=Object.entries(months).map(([m,v])=>{
     const tot=v.inc+v.out; const h=(tot/maxM*100);
@@ -864,7 +873,7 @@ function viewStats(){
   <div class="card">
     <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 小资贷款 / 电子钱包</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
-    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank；小资贷款 = Ryt PayLater（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减；在「债务台账」的 Ryt PayLater 卡片修改额度或记录还款即自动联动）；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等及"其他"）均计入电子钱包</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减；在「债务台账」对应卡片修改额度或记录还款即自动联动）；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等及"其他"）均计入电子钱包</div>
   </div>
   <div class="card">
     <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
