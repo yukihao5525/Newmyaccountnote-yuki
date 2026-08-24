@@ -1,2 +1,5 @@
 .workbuddy-ai/
 .deploy_token
+.deploy_token_b
+.tok_new
+sync.js

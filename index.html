@@ -335,7 +335,7 @@ function manualSave(){
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtRM(n){ const v=Number(n)||0; if(Math.abs(v-Math.round(v))<1e-9) return 'RM '+Math.round(v).toLocaleString('en-MY'); return 'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-// 金额输入解析：无小数点时，整数末两位视为角分(sen)，但末尾为 "00" 视为整数金额（如 100 → 100.00，1200 → 1200.00）；含小数点按实际金额解析（最多两位）
+// 金额输入解析：无小数点时，整数直接作为「元」金额（不再除以100），如 20 → 20.00、100 → 100.00、1234 → 1234.00；含小数点按实际金额解析（最多两位）
 function parseAmountInput(raw){
   if(raw==null) return 0;
   let s=String(raw).replace(/[^\d.]/g,'');
@@ -346,8 +346,7 @@ function parseAmountInput(raw){
     const v=parseFloat(parts.join('.')); return isNaN(v)?0:v;
   }
   const n=Number(s); if(isNaN(n)) return 0;
-  if(/00$/.test(s)) return n;        // 末尾是 00 → 整数金额（100 → 100.00，10000 → 10000.00）
-  return Math.round(n)/100;          // 否则末两位为角分（sen）：1234 → 12.34，505 → 5.05，150 → 1.50
+  return n;                          // 无小数点整数 → 直接按「元」计（20 → 20.00，100 → 100.00），不再当角分
 }
 function amountInputValue(n){ const v=Number(n)||0; if(Math.abs(v-Math.round(v))<1e-9) return String(Math.round(v)); return (Math.round(v*100)/100).toFixed(2); }
 function onAmountInput(){
@@ -656,8 +655,8 @@ function viewQuick(){
           <option value="收入" ${rec.type==='收入'?'selected':''}>收入</option>
           <option value="支出" ${rec.type==='支出'?'selected':''}>支出</option>
         </select></label>
-      <label class="fld"><span class="lb">金额（RM · 无小数点时末尾 00 按整数，否则末两位为角分：100 = RM 100.00）</span>
-        <div class="rm-input"><input type="text" inputmode="decimal" id="f_amount" value="${esc(amtInit)}" placeholder="如 100 = RM 100.00，1234 = RM 12.34，505 = RM 5.05，含小数点按实际" oninput="onAmountInput()" onblur="onAmountBlur()"></div></label>
+      <label class="fld"><span class="lb">金额（RM · 整数直接按元计，如 20 = RM 20.00；含小数点按实际，如 12.34 = RM 12.34）</span>
+        <div class="rm-input"><input type="text" inputmode="decimal" id="f_amount" value="${esc(amtInit)}" placeholder="如 20 = RM 20.00，12.34 = RM 12.34，含小数点按实际" oninput="onAmountInput()" onblur="onAmountBlur()"></div></label>
       <div class="muted" id="amountPreview" style="margin-top:-4px;font-size:11px;color:var(--purple-deep)"></div>
     </div>
     <label class="fld"><span class="lb">消费分类${rec.type==='收入'?'（含「借款」为流入）':'（含「借出/还款」为流出）'}</span>
