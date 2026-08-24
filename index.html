@@ -246,12 +246,12 @@ const OPTIONS = {
   incomeCats:['工资','奖金','兼职','理财收益','红包','其他收入','借款','小说收益','档口收益','资金转账','买卖'],
   expenseCats:['餐饮','资金转账','交通','购物','孩子','电子烟','香烟','瓜果蔬菜','利息','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','生计用品','家庭用品','日常用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
   items:['面包','蛋糕','冰淇淋','零食','粿条汤','云吞面','爪哇面','炒粿条','意大利面','Nugget','炸鸡','薯条','炒饭','鸡饭','碟仔饭','韩式饭/面','经济饭','Nasi Lemak','Laksa','文具','服装（衣裤鞋袜/内衣裤）','卫生棉','蔬菜','鸡肉','猪肉','海鲜（鱼/虾/蟹）','零件','五金件','车载用品','厨房用品','白咖啡冰','PIZZA🍕','寿司🍣','华夫饼🧇','Mc Donald','KFC','满煎糕','塔可 TACO','卤肉','汉堡🍔Burger','榴莲','山竹'],
-  members:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','母女仨','家婆','妹妹','爸爸','妈妈','叔叔','朋友'],
+  members:['我','老公','叶诗玲','赖芊汐','陈俊伟','俩姊妹','母女仨','我+叶诗玲','我+赖芊汐','我+陈俊伟','夫妻👫','家婆','妹妹','爸爸','妈妈','叔叔','朋友'],
   locations:['28间','二街','长城咖啡店','77咖啡店','百福叻沙','家园咖啡店','中兴咖啡店','国记点心','银火饮食中心','食全食美饮食广场','鸿运咖啡店','88咖啡店','大年咖啡店','The Store','Aman Jaya','45菜市场','LOTUS','ECONSAVE','HASANI BOOK','ECO','MR DIY','EASY HOME','UTC巴刹','老街场','UTC','MIXUE蜜雪','TAMAN KELADI','TAMAN INTAN','其他'],
   payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
   txnTypes:['CASH','DUITNOW TRANSFER','QR SCAN TRANSFER']
 };
-const STAT_MEMBERS=['我自己']; // 统计·成员收支仅保留本人（其他成员仍可在记账时选「谁用了/谁给了钱」）
+const STAT_MEMBERS=['我']; // 统计·成员收支仅保留本人（其他成员仍可在记账时选「谁用了/谁给了钱」）
 const STORE_KEY='mobileWorkbenchDB_v1';
 
 /* ============ 数据层 ============ */
@@ -304,7 +304,7 @@ function seed(){
       {id:uid(),name:'Shopee Pay',type:'ewallet',balance:0,opening:0},
       {id:uid(),name:'Ryt Bank',type:'ewallet',balance:0,opening:0} // 电子钱包的一种（Ryt PayLater 是其划分出的贷款）
     ],
-    counterparties:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','家婆','妹妹','爸爸','妈妈','叔叔','朋友','RHB Bank','Tng Ewallet','Shopee','公司','老板']
+    counterparties:['老公','我','叶诗玲','赖芊汐','陈俊伟','家婆','妹妹','爸爸','妈妈','叔叔','朋友','RHB Bank','Tng Ewallet','Shopee','公司','老板']
   };
 }
 function save(){
@@ -390,6 +390,13 @@ function migrateData(db){
   if(!db.debts) db.debts=[];
   // 车贷更名：JXC 8339 → ALZA（兼容老数据）
   db.debts.forEach(d=>{ if(d.name==='车贷 JXC 8339') d.name='车贷 ALZA'; });
+  // 成员更名：我自己 → 我（兼容老数据，保证统计/明细不错位）
+  if(Array.isArray(db.records)) db.records.forEach(r=>{
+    if(r.member==='我自己') r.member='我';
+    if(r.transferFrom==='我自己') r.transferFrom='我';
+    if(r.transferTo==='我自己') r.transferTo='我';
+    if(r.payer==='我自己') r.payer='我';
+  });
 }
 // 多账户资金联动
 function ensureAccounts(db){
@@ -561,7 +568,7 @@ function viewOverview(){
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
   return `
   <div class="overview-hero">
-    <img class="oh-icon" src="overview-avatar.jpg" alt="avatar">
+    <img class="oh-icon" src="avatar.jpg" alt="avatar">
     <div class="oh-txt">
       <h2>欢迎回来 ✨</h2>
       <div class="oh-sub">${now} · 记录今天的每一笔</div>
