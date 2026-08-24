@@ -293,7 +293,14 @@ function seed(){
     accounts:[
       {id:uid(),name:'现金',type:'cash',balance:0,opening:0},
       {id:uid(),name:'银行 RHB',type:'bank',balance:0,opening:0},
-      {id:uid(),name:'电子钱包',type:'ewallet',balance:0,opening:0}
+      {id:uid(),name:'电子钱包',type:'ewallet',balance:0,opening:0}, // 锚点：其他 / Ryt Bank / 未知电子钱包 并入此处（始终显示）
+      {id:uid(),name:'微信',type:'ewallet',balance:0,opening:0},
+      {id:uid(),name:'支付宝',type:'ewallet',balance:0,opening:0},
+      {id:uid(),name:'Tng Ewallet',type:'ewallet',balance:0,opening:0},
+      {id:uid(),name:'GX Bank',type:'ewallet',balance:0,opening:0}, // 单独成栏的电子钱包（类似支付宝/微信，需 top up）
+      {id:uid(),name:'Boost',type:'ewallet',balance:0,opening:0},
+      {id:uid(),name:'Grab Pay',type:'ewallet',balance:0,opening:0},
+      {id:uid(),name:'Shopee Pay',type:'ewallet',balance:0,opening:0}
     ],
     counterparties:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','家婆','妹妹','爸爸','妈妈','叔叔','朋友','RHB Bank','Tng Ewallet','Shopee','公司','老板']
   };
@@ -375,27 +382,45 @@ function migrateData(db){
 function ensureAccounts(db){
   db=db||DB;
   if(!db.accounts||!Array.isArray(db.accounts)) db.accounts=[];
-  const defs=[['现金','cash'],['银行 RHB','bank'],['电子钱包','ewallet']];
+  // 每个电子钱包支付方式都有专属账户；「电子钱包」为锚点（其他/Ryt Bank/未知电子钱包并入），始终显示
+  const defs=[
+    ['现金','cash'],['银行 RHB','bank'],['电子钱包','ewallet'],
+    ['微信','ewallet'],['支付宝','ewallet'],['Tng Ewallet','ewallet'],
+    ['GX Bank','ewallet'],['Boost','ewallet'],['Grab Pay','ewallet'],['Shopee Pay','ewallet']
+  ];
   defs.forEach(([n,t])=>{ if(!db.accounts.some(a=>a.name===n)) db.accounts.push({id:uid(),name:n,type:t,opening:0}); else { const a=db.accounts.find(x=>x.name===n); if(a.opening==null) a.opening=0; } });
-  // GX Bank 属于电子钱包（非正规银行，类似支付宝/微信、需 top up 才能用）；若曾被误建为银行账户则纠正
+  // GX Bank 属电子钱包（非正规银行，类似支付宝/微信、需 top up 才能用）；若曾被误建为银行账户则纠正
   db.accounts.forEach(a=>{ if(/gx bank/i.test(a.name) && a.type==='bank') a.type='ewallet'; });
+  // 迁移：GX Bank 从「电子钱包」独立成栏（旧版把 0.11 期初误并入电子钱包）。仅执行一次。
+  if(!db._gxSplit){
+    const gx=db.accounts.find(a=>/gx bank/i.test(a.name));
+    const ew=db.accounts.find(a=>a.name==='电子钱包');
+    if(gx && (gx.opening==null||gx.opening===0) && ew && Math.abs(Number(ew.opening)||0)===0.11){ gx.opening=0.11; ew.opening=0; }
+    db._gxSplit=true;
+  }
   if(!db.counterparties||!Array.isArray(db.counterparties)) db.counterparties=[];
 }
 function ensureOpening(db){
   db=db||DB;
   if(db._openBalApplied) return; // 已注入期初余额则跳过
-  // 22/8/2026 以前数据丢失，补录期初余额：现金 3 / 银行RHB 0.78 / 电子钱包(含 GX Bank) 0.11
-  const map={'现金':3,'银行 RHB':0.78,'电子钱包':0.11};
+  // 22/8/2026 以前数据丢失，补录期初余额：现金 3 / 银行RHB 0.78 / GX Bank 0.11（GX Bank 单独成栏电子钱包）
+  const map={'现金':3,'银行 RHB':0.78,'GX Bank':0.11};
   db.accounts.forEach(a=>{ if(map[a.name]!=null && (a.opening==null||a.opening===0)) a.opening=map[a.name]; });
   db._openBalApplied=true;
 }
 function acctName(id){ const a=DB.accounts.find(x=>x.id===id); return a?a.name:''; }
 function acctIdByType(t){ const a=DB.accounts.find(x=>x.type===t); return a?a.id:null; }
+// 支付方式 → 专属账户映射：现金→现金；RHB Bank→银行；各电子钱包支付方式各自成栏；其余并入「电子钱包」锚点
+const PM_EWALLET_ACCOUNT={
+  '微信':'微信','支付宝':'支付宝','Tng Ewallet':'Tng Ewallet','GX Bank':'GX Bank',
+  'Boost':'Boost','Grab Pay':'Grab Pay','Shopee Pay':'Shopee Pay'
+};
 function accountForPayMethod(pm){
   if(!pm||/PayLater/i.test(pm)) return null; // PayLater 由债务模块单独处理
   if(pm==='现金') return acctIdByType('cash');
   if(pm==='RHB Bank') return acctIdByType('bank'); // 仅 RHB Bank 计入「银行」，与电子钱包分离（银行流水不与电子钱包混在一起）
-  return acctIdByType('ewallet'); // 其余（微信/支付宝/Tng/Boost/Grab/Shopee Pay/GX Bank 等）计入电子钱包；GX Bank 属电子钱包、非正规银行
+  if(PM_EWALLET_ACCOUNT[pm]) return acctIdByName(PM_EWALLET_ACCOUNT[pm]); // 每个电子钱包支付方式各自成栏（含 GX Bank）
+  return acctIdByName('电子钱包'); // 其他 / Ryt Bank / 未知电子钱包 → 电子钱包锚点
 }
 function computeAccountBalances(){
   const bal={}; DB.accounts.forEach(a=>bal[a.id]=Number(a.opening)||0); // 期初余额（opening）作为账户起始值
@@ -412,6 +437,27 @@ function computeAccountBalances(){
   return bal;
 }
 function syncAccountBalances(){ const bal=computeAccountBalances(); DB.accounts.forEach(a=>{ a.balance=bal[a.id]||0; }); }
+// 收支流水中实际涉及过的账户 id（非内部调拨按支付方式归属；内部调拨按转出/转入账户）
+function activeAccountIds(){
+  const set=new Set();
+  DB.records.forEach(r=>{
+    if(r.isTransfer){ if(r.fromAccount) set.add(r.fromAccount); if(r.toAccount) set.add(r.toAccount); }
+    else { const aid=accountForPayMethod(r.payMethod); if(aid) set.add(aid); }
+  });
+  return set;
+}
+// 资金分布 / 支付方式现金流 可见账户：现金·银行·「电子钱包」锚点·GX Bank 始终显示；其余电子钱包有余额或发生过收支才显示（用户要求「其他电子钱包有余额/收支也有单独一栏」）
+function visibleFundAccounts(){
+  const active=activeAccountIds();
+  const bal=computeAccountBalances();
+  return DB.accounts.filter(a=>{
+    if(a.type==='cash'||a.type==='bank') return true;
+    if(a.name==='电子钱包') return true;   // 锚点：始终显示
+    if(a.name==='GX Bank') return true;     // 单独成栏：始终显示
+    if(bal[a.id] && Math.abs(bal[a.id])>1e-9) return true; // 有余额（含期初）
+    return active.has(a.id);                // 或发生过收支
+  });
+}
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ============ 债务计算 ============ */
@@ -494,7 +540,7 @@ function viewOverview(){
   const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
   const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
-  const fundCards=DB.accounts.map(a=>({label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, v:acctBal[a.id]||0}));
+  const fundCards=visibleFundAccounts().map(a=>({label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, v:acctBal[a.id]||0}));
   fundCards.push({label:plLabel, v:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)});
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
@@ -969,7 +1015,7 @@ function viewStats(){
   const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const acctBal=computeAccountBalances();
-  const pmStat=DB.accounts.map(a=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
+  const pmStat=visibleFundAccounts().map(a=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
   pmStat.push({label:plLabel, i:0, o:0, bal:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)});
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
   const bars=Object.entries(months).map(([m,v])=>{
@@ -1024,7 +1070,7 @@ function viewStats(){
   <div class="card">
     <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 小资贷款 / 电子钱包</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
-    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减；在「债务台账」对应卡片修改额度或记录还款即自动联动）；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay / GX Bank 等及"其他"）均计入电子钱包</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；GX Bank 单独成栏电子钱包（类似支付宝/微信，需 top up）；微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等每个电子钱包支付方式各自成栏，仅当有余额或发生过收支时才显示；"其他" / Ryt Bank / 未知电子钱包 并入「电子钱包」锚点；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减）</div>
   </div>
   <div class="card">
     <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
