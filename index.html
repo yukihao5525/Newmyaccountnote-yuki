@@ -231,6 +231,14 @@
   </div>
 </div>
 
+<div class="modal-mask" id="dayModal" onclick="if(event.target===this)closeDayModal()">
+  <div class="modal modal-wrap">
+    <button class="close" onclick="closeDayModal()">×</button>
+    <h2 id="dayModalTitle">当日明细</h2>
+    <div id="dayModalBody"></div>
+  </div>
+</div>
+
 <script>
 /* ============ 选项库（已全部内置） ============ */
 const OPTIONS = {
@@ -252,6 +260,9 @@ let editingId=null;
 let curModule='overview';
 let debtViewMode='all'; // all | active
 let storageOK=true;
+let calView='month'; // month | year
+let calY=new Date().getFullYear();
+let calM=new Date().getMonth()+1; // 1-12
 
 function testStorage(){
   try{ const k='__wb_test__'; localStorage.setItem(k,'1'); const v=localStorage.getItem(k); localStorage.removeItem(k); return v==='1'; }
@@ -262,7 +273,7 @@ storageOK = testStorage();
 function load(){
   try{
     const raw=localStorage.getItem(STORE_KEY);
-    if(raw){ const d=JSON.parse(raw); if(d&&d.records){ ensurePayLaterDebt(d); migrateData(d); return d; } }
+    if(raw){ const d=JSON.parse(raw); if(d&&d.records){ ensurePayLaterDebt(d); migrateData(d); ensureAccounts(d); return d; } }
   }catch(e){ console.warn('load fail',e); }
   return seed();
 }
@@ -277,11 +288,17 @@ function seed(){
       {id:uid(),name:'个人欠款',totalAmount:1000,installments:null,monthlyPayment:0,startDate:'',payMethod:'',status:'待结清',note:'每个星期利息100'},
       {id:uid(),name:'Ryt PayLater',kind:'paylater',totalAmount:500,installments:0,monthlyPayment:0,startDate:'',payMethod:'Ryt PayLater',status:'正常还款',note:'小资贷款（PayLater 额度，可在本卡片修改额度/本金，概览与统计自动联动）'}
     ],
-    budgets:{ monthly:0, weekly:0, cat:{} }
+    budgets:{ monthly:0, weekly:0, cat:{} },
+    accounts:[
+      {id:uid(),name:'现金',type:'cash',balance:0},
+      {id:uid(),name:'银行 RHB',type:'bank',balance:0},
+      {id:uid(),name:'电子钱包',type:'ewallet',balance:0}
+    ],
+    counterparties:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','家婆','妹妹','爸爸','妈妈','叔叔','朋友','RHB Bank','Tng Ewallet','Shopee','公司','老板']
   };
 }
 function save(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); storageOK=true; markSaved(); }
+  try{ syncAccountBalances(); localStorage.setItem(STORE_KEY, JSON.stringify(DB)); storageOK=true; markSaved(); }
   catch(e){ storageOK=false; markSavedFail(); console.warn('save fail',e); }
   autoCloudSync();
 }
@@ -307,7 +324,35 @@ function manualSave(){
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function fmtRM(n){ const v=Number(n)||0; return 'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtRM(n){ const v=Number(n)||0; if(Math.abs(v-Math.round(v))<1e-9) return 'RM '+Math.round(v).toLocaleString('en-MY'); return 'RM '+v.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// 金额输入解析：纯数字末两位为角分（分=sen，如 1234 → 12.34，505 → 5.05，100 → 1.00）；含小数点则按实际解析（最多两位小数）
+function parseAmountInput(raw){
+  if(raw==null) return 0;
+  let s=String(raw).replace(/[^\d.]/g,'');
+  if(s===''||s==='.') return 0;
+  if(s.indexOf('.')>=0){
+    const parts=s.split('.');
+    if(parts[1]&&parts[1].length>2) parts[1]=parts[1].slice(0,2); // 最多两位小数，截断
+    const v=parseFloat(parts.join('.')); return isNaN(v)?0:v;
+  }
+  const n=Number(s); if(isNaN(n)) return 0;
+  return Math.round(n)/100; // 最后两位为角分
+}
+function amountInputValue(n){ const v=Number(n)||0; if(Math.abs(v-Math.round(v))<1e-9) return String(Math.round(v)); return (Math.round(v*100)/100).toFixed(2); }
+function onAmountInput(){
+  const el=document.getElementById('f_amount'); if(!el) return;
+  let s=el.value.replace(/[^\d.]/g,'');
+  const dot=s.indexOf('.');
+  if(dot>=0){ s=s.slice(0,dot+1)+s.slice(dot+1).replace(/\./g,''); const parts=s.split('.'); if(parts[1]&&parts[1].length>2) parts[1]=parts[1].slice(0,2); s=parts.join('.'); }
+  if(el.value!==s) el.value=s;
+  const p=document.getElementById('amountPreview'); if(p){ const v=parseAmountInput(s); p.textContent = s? ('= '+fmtRM(v)) : ''; }
+}
+function onAmountBlur(){
+  const el=document.getElementById('f_amount'); if(!el) return;
+  const v=parseAmountInput(el.value);
+  el.value = amountInputValue(v);
+  const p=document.getElementById('amountPreview'); if(p) p.textContent = el.value? ('= '+fmtRM(v)) : '';
+}
 function debtName(id){ const d=DB.debts.find(x=>x.id===id); return d?d.name:''; }
 // 小资贷款联动：任意名称含 "PayLater" 的债务都归类为「联动小资贷款」
 function isPayLaterDebt(d){ return !!(d && (d.kind==='paylater' || (d.name && /PayLater/i.test(d.name)))); }
@@ -325,6 +370,37 @@ function migrateData(db){
   // 车贷更名：JXC 8339 → ALZA（兼容老数据）
   db.debts.forEach(d=>{ if(d.name==='车贷 JXC 8339') d.name='车贷 ALZA'; });
 }
+// 多账户资金联动
+function ensureAccounts(db){
+  db=db||DB;
+  if(!db.accounts||!Array.isArray(db.accounts)) db.accounts=[];
+  const defs=[['现金','cash'],['银行 RHB','bank'],['电子钱包','ewallet']];
+  defs.forEach(([n,t])=>{ if(!db.accounts.some(a=>a.name===n)) db.accounts.push({id:uid(),name:n,type:t}); });
+  if(!db.counterparties||!Array.isArray(db.counterparties)) db.counterparties=[];
+}
+function acctName(id){ const a=DB.accounts.find(x=>x.id===id); return a?a.name:''; }
+function acctIdByType(t){ const a=DB.accounts.find(x=>x.type===t); return a?a.id:null; }
+function accountForPayMethod(pm){
+  if(!pm||/PayLater/i.test(pm)) return null; // PayLater 由债务模块单独处理
+  if(pm==='现金') return acctIdByType('cash');
+  if(/bank/i.test(pm)) return acctIdByType('bank');
+  return acctIdByType('ewallet'); // 其余支付方式（电子钱包类）计入电子钱包
+}
+function computeAccountBalances(){
+  const bal={}; DB.accounts.forEach(a=>bal[a.id]=0);
+  DB.records.forEach(r=>{
+    const amt=Number(r.amount)||0;
+    if(r.isTransfer){
+      if(r.fromAccount&&bal[r.fromAccount]!=null) bal[r.fromAccount]-=amt;
+      if(r.toAccount&&bal[r.toAccount]!=null) bal[r.toAccount]+=amt;
+    } else {
+      const aid=accountForPayMethod(r.payMethod);
+      if(aid&&bal[aid]!=null) bal[aid]+= (r.type==='收入'?amt:-amt);
+    }
+  });
+  return bal;
+}
+function syncAccountBalances(){ const bal=computeAccountBalances(); DB.accounts.forEach(a=>{ a.balance=bal[a.id]||0; }); }
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ============ 债务计算 ============ */
@@ -350,6 +426,7 @@ const NAVS=[
   {id:'debt', ic:'💳', label:'债务'},
   {id:'stats', ic:'📊', label:'统计'},
   {id:'budget', ic:'💰', label:'预算'},
+  {id:'calendar', ic:'📅', label:'日历'},
   {id:'library', ic:'📋', label:'选项库'},
   {id:'backup', ic:'💾', label:'备份'}
 ];
@@ -372,6 +449,7 @@ function render(){
   else if(curModule==='debt') html+=viewDebt();
   else if(curModule==='stats') html+=viewStats();
   else if(curModule==='budget') html+=viewBudget();
+  else if(curModule==='calendar') html+=viewCalendar();
   else if(curModule==='library') html+=viewLibrary();
   else if(curModule==='backup') html+=viewBackup();
   sc.innerHTML=html;
@@ -380,6 +458,8 @@ function render(){
   if(curModule==='debt') bindDebt();
   if(curModule==='budget') bindBudget();
   if(curModule==='backup') bindBackup();
+  if(curModule==='library'){ renderAcctList(); renderCpartyList(); }
+  if(curModule==='calendar') bindCalendar();
 }
 function storageBanner(){
   if(storageOK) return '';
@@ -390,26 +470,20 @@ function storageBanner(){
 function viewOverview(){
   const now=todayStr(); const ym=now.slice(0,7); const mon=weekMonday(now);
   let tInc=0,tOut=0;
-  DB.records.forEach(r=>{ if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
   let wInc=0,wOut=0;
-  DB.records.forEach(r=>{ if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
   let mInc=0,mOut=0;
-  DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
   const dayBudget=DB.budgets.daily||0;
-  // 资金分布：现金 / 银行(RHB) / 小资贷款(PayLater 债务合计剩余待还本金) / 电子钱包（累计净额 = 收入 - 支出）
+  // 资金分布：各账户余额（现金/银行/电子钱包…动态，含内部转账调拨）+ 小资贷款（PayLater 债务合计剩余待还本金）
+  const acctBal=computeAccountBalances();
   const payLaterDebts=getPayLaterDebts();
   const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
-  const payLaterPaid=payLaterDebts.reduce((s,d)=>s+debtStats(d).paidPrincipal,0);
   const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
-  const payLaterPMs=new Set(payLaterDebts.map(d=>d.payMethod).filter(Boolean));
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
-  const pmGroups=[
-    {label:'💵 现金', test:m=>m==='现金'},
-    {label:'🏦 银行', test:m=>m==='RHB Bank'},
-    {label:plLabel, test:m=>payLaterPMs.has(m), paylater:true},
-    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&!payLaterPMs.has(m)}
-  ];
-  const pmStat=pmGroups.map(g=>{ if(g.paylater){ return {label:g.label, v:payLaterRemain, sub:'额度 '+fmtRM(payLaterLimit)+' · 已还 '+fmtRM(payLaterPaid)}; } let v=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ v+= (r.type==='收入'?1:-1)*(Number(r.amount)||0); } }); return {label:g.label,v}; });
+  const fundCards=DB.accounts.map(a=>({label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, v:acctBal[a.id]||0}));
+  fundCards.push({label:plLabel, v:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)});
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
@@ -422,11 +496,11 @@ function viewOverview(){
     </div>
   </div>
   <div class="card">
-    <h2>💰 资金分布 <span class="tag">现金 / 银行 / 小资贷款 / 电子钱包</span></h2>
+    <h2>💰 资金分布 <span class="tag">多账户 · 内部调拨实时联动</span></h2>
     <div class="stat-grid-2">
-      ${pmStat.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.v<0?'var(--danger)':'var(--ok)'}">${fmtRM(s.v)}</div>${s.sub?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.sub}</div>`:''}</div>`).join('')}
+      ${fundCards.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.paylater?'var(--danger)':(s.v<0?'var(--danger)':'var(--ok)')}">${fmtRM(s.v)}</div>${s.sub?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.sub}</div>`:''}</div>`).join('')}
     </div>
-    <div class="muted" style="margin-top:8px;font-size:11px">各渠道累计净流入（收入−支出）；现金=现金，银行=RHB Bank；小资贷款=任意名称带 PayLater 的债务合计（显示「剩余待还本金」= 额度−已还，随关联还款递减；额度/已还在「债务台账」对应卡片修改），其余支付方式计入电子钱包</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">各账户实时余额：由记账流水自动汇总（收入加、支出减），内部调拨只在一进一出间转移、不计入收支总额；小资贷款=任意名称带 PayLater 的债务合计「剩余待还本金」= 额度−已还（随关联还款递减）。可在「选项库 → 账户管理」增删账户。</div>
   </div>
   <div class="card">
     <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
@@ -481,7 +555,8 @@ function viewOverview(){
 /* ============ 模块：快速记账 ============ */
 function viewQuick(){
   const ed = editingId? DB.records.find(r=>r.id===editingId) : null;
-  const rec = ed || {date:todayStr(),type:'支出',amount:'',category:'',location:'',note:'',orderNo:'',payMethod:'',txnType:'',member:'',linkedDebtId:'',borrowFrom:'',payTo:'',item:'',transferFrom:'',transferTo:''};
+  const rec = ed || {date:todayStr(),type:'支出',amount:'',category:'',location:'',note:'',orderNo:'',payMethod:'',txnType:'',member:'',linkedDebtId:'',borrowFrom:'',payTo:'',item:'',transferFrom:'',transferTo:'',payer:'',fromAccount:'',toAccount:''};
+  const amtInit = (rec.amount===''||rec.amount==null)? '' : amountInputValue(rec.amount);
   const cats = rec.type==='收入'? OPTIONS.incomeCats : OPTIONS.expenseCats;
   const catOpts = cats.map(c=>`<option ${c===rec.category?'selected':''}>${c}</option>`).join('');
   const memOpts = OPTIONS.members.map(m=>`<option ${m===rec.member?'selected':''}>${m}</option>`).join('');
@@ -489,6 +564,8 @@ function viewQuick(){
   const payOpts = ['<option value="">（不选）</option>'].concat(OPTIONS.payMethods.map(p=>`<option ${p===rec.payMethod?'selected':''}>${p}</option>`)).join('');
   const txnOpts = ['<option value="">（不选）</option>'].concat(OPTIONS.txnTypes.map(t=>`<option ${t===rec.txnType?'selected':''}>${t}</option>`)).join('');
   const debtOpts = ['<option value="">（不关联）</option>'].concat(DB.debts.map(d=>`<option value="${d.id}" ${d.id===rec.linkedDebtId?'selected':''}>${esc(d.name)}</option>`)).join('');
+  const acctOptsFrom = ['<option value="">（不选=普通记录）</option>'].concat(DB.accounts.map(a=>`<option value="${a.id}" ${a.id===rec.fromAccount?'selected':''}>${esc(a.name)}</option>`)).join('');
+  const acctOptsTo = ['<option value="">（不选=普通记录）</option>'].concat(DB.accounts.map(a=>`<option value="${a.id}" ${a.id===rec.toAccount?'selected':''}>${esc(a.name)}</option>`)).join('');
   const tpl = `日期｜收支类型｜金额｜消费分类｜地点｜单号｜支付方式｜家庭成员\n${todayStr()}｜｜｜｜｜｜｜`;
   return `
   <div class="card">
@@ -507,8 +584,9 @@ function viewQuick(){
           <option value="收入" ${rec.type==='收入'?'selected':''}>收入</option>
           <option value="支出" ${rec.type==='支出'?'selected':''}>支出</option>
         </select></label>
-      <label class="fld"><span class="lb">金额（RM，纯数字）</span>
-        <div class="rm-input"><input type="number" step="0.01" id="f_amount" value="${esc(rec.amount)}" placeholder="0.00"></div></label>
+      <label class="fld"><span class="lb">金额（RM · 纯数字，末两位自动为角分）</span>
+        <div class="rm-input"><input type="text" inputmode="decimal" id="f_amount" value="${esc(amtInit)}" placeholder="如 1234 = RM 12.34" oninput="onAmountInput()" onblur="onAmountBlur()"></div></label>
+      <div class="muted" id="amountPreview" style="margin-top:-4px;font-size:11px;color:var(--purple-deep)"></div>
     </div>
     <label class="fld"><span class="lb">消费分类${rec.type==='收入'?'（含「借款」为流入）':'（含「借出/还款」为流出）'}</span>
       <select id="f_category">${catOpts}</select></label>
@@ -528,12 +606,19 @@ function viewQuick(){
       <label class="fld"><span class="lb">家庭成员</span><select id="f_member">${memOpts}</select></label>
       <label class="fld" id="f_debtwrap"><span class="lb">关联债务（还款自动扣本金）</span><select id="f_debt">${debtOpts}</select></label>
     </div>
+    <label class="fld" id="f_payerwrap" style="display:none"><span class="lb">付款方（收入来自谁/哪方，可选）</span><input id="f_payer" list="counterpartySuggest" value="${esc(rec.payer||'')}" placeholder="往来对象库选或手写或留空"></label>
     <label class="fld" id="f_partywrap" style="display:none"><span class="lb" id="f_party_lb">借款人</span><input id="f_party" value="${esc(rec.borrowFrom||rec.payTo||'')}" placeholder=""></label>
     <div class="row" id="f_transferwrap" style="display:none">
       <label class="fld"><span class="lb">转账人（可选）</span><input id="f_transferFrom" list="memberSuggest" value="${esc(rec.transferFrom||'')}" placeholder="成员库选或手写或留空"></label>
       <label class="fld"><span class="lb">转账给谁（可选）</span><input id="f_transferTo" list="memberSuggest" value="${esc(rec.transferTo||'')}" placeholder="成员库选或手写或留空"></label>
     </div>
+    <div class="row" id="f_acctwrap" style="display:none">
+      <label class="fld"><span class="lb">转出账户 ↓</span><select id="f_fromAcct">${acctOptsFrom}</select></label>
+      <label class="fld"><span class="lb">转入账户 ↑</span><select id="f_toAcct">${acctOptsTo}</select></label>
+    </div>
+    <div class="muted" id="acctHint" style="display:none;margin-top:-2px;font-size:11px;color:var(--purple-deep)">两端账户都选 → 记为「内部调拨」：不计入收支统计，只把金额从转出账户移到转入账户。</div>
     <datalist id="memberSuggest">${OPTIONS.members.map(m=>`<option>${esc(m)}</option>`).join('')}</datalist>
+    <datalist id="counterpartySuggest">${DB.counterparties.map(c=>`<option>${esc(c)}</option>`).join('')}</datalist>
     <label class="fld"><span class="lb">备注</span><input id="f_note" value="${esc(rec.note)}" placeholder="选填"></label>
     <div class="btn-row">
       <button class="btn primary" onclick="submitRecord()">${ed?'保存修改':'添加记录'}</button>
@@ -557,6 +642,10 @@ function rebindCats(){
 function rebindParty(){
   const type=document.getElementById('f_type').value;
   const cat=document.getElementById('f_category').value;
+  // 付款方（收入记录）
+  const payerWrap=document.getElementById('f_payerwrap');
+  if(type==='收入'){ payerWrap.style.display='block'; } else { payerWrap.style.display='none'; const pe=document.getElementById('f_payer'); if(pe) pe.value=''; }
+  // 借款人 / 借给谁 / 还给谁
   const wrap=document.getElementById('f_partywrap');
   const lb=document.getElementById('f_party_lb');
   const inp=document.getElementById('f_party');
@@ -569,14 +658,22 @@ function rebindParty(){
   } else {
     wrap.style.display='none'; inp.value='';
   }
-  // 资金转账：显示 转账人 / 转账给谁
+  // 资金转账：转账人/转账给谁（往来对象）+ 转出/转入账户
   const twrap=document.getElementById('f_transferwrap');
+  const awrap=document.getElementById('f_acctwrap');
+  const ahint=document.getElementById('acctHint');
   if(cat==='资金转账'){
     twrap.style.display='flex';
+    awrap.style.display='flex';
+    if(ahint) ahint.style.display='block';
   } else {
     twrap.style.display='none';
     document.getElementById('f_transferFrom').value='';
     document.getElementById('f_transferTo').value='';
+    awrap.style.display='none';
+    if(ahint) ahint.style.display='none';
+    document.getElementById('f_fromAcct').value='';
+    document.getElementById('f_toAcct').value='';
   }
 }
 function copyTpl(){
@@ -587,18 +684,23 @@ function bindQuick(){
   rebindCats();
   const catEl=document.getElementById('f_category');
   if(catEl) catEl.addEventListener('change', rebindParty);
+  onAmountInput();
 }
 function submitRecord(){
   const type=document.getElementById('f_type').value;
-  const amount=parseFloat(document.getElementById('f_amount').value);
+  const amount=parseAmountInput(document.getElementById('f_amount').value);
   if(isNaN(amount)||amount<=0){ toast('请填写有效金额'); return; }
-  const linkedDebtId=type==='收入'?'':document.getElementById('f_debt').value;
   const category=document.getElementById('f_category').value;
+  const linkedDebtId=(type==='收入')? '' : document.getElementById('f_debt').value;
   const partyVal=(document.getElementById('f_party')||{value:''}).value.trim();
   const borrowFrom = (type==='收入' && category==='借款') ? partyVal : '';
   const payTo      = (type==='支出' && (category==='借出' || category==='还款')) ? partyVal : '';
+  const payer      = (type==='收入') ? (document.getElementById('f_payer')||{value:''}).value.trim() : '';
   const transferFrom = category==='资金转账' ? (document.getElementById('f_transferFrom')||{value:''}).value.trim() : '';
   const transferTo   = category==='资金转账' ? (document.getElementById('f_transferTo')||{value:''}).value.trim() : '';
+  const fromAccount  = category==='资金转账' ? (document.getElementById('f_fromAcct')||{value:''}).value : '';
+  const toAccount    = category==='资金转账' ? (document.getElementById('f_toAcct')||{value:''}).value : '';
+  const isTransfer   = !!(fromAccount && toAccount && fromAccount!==toAccount);
   const rec={
     date:document.getElementById('f_date').value||todayStr(),
     type, amount:amount,
@@ -610,12 +712,14 @@ function submitRecord(){
     txnType:document.getElementById('f_txn').value,
     member:document.getElementById('f_member').value,
     note:document.getElementById('f_note').value.trim(),
-    linkedDebtId:linkedDebtId||'',
-    borrowFrom, payTo, transferFrom, transferTo
+    linkedDebtId:isTransfer?'':(linkedDebtId||''),
+    borrowFrom, payTo, transferFrom, transferTo,
+    payer, fromAccount:isTransfer?fromAccount:'', toAccount:isTransfer?toAccount:'', isTransfer
   };
   if(editingId){ const i=DB.records.findIndex(r=>r.id===editingId); DB.records[i]={...DB.records[i],...rec}; editingId=null; toast('已保存修改'); }
-  else { rec.id=uid(); DB.records.unshift(rec); toast('✅ 已添加记录'); }
-  if(linkedDebtId){ const s=debtStats(DB.debts.find(d=>d.id===linkedDebtId)); toast('已关联「'+debtName(linkedDebtId)+'」，剩余本金 '+fmtRM(s.remaining)); }
+  else { rec.id=uid(); DB.records.unshift(rec); toast(isTransfer?'✅ 已记内部调拨':'✅ 已添加记录'); }
+  if(!isTransfer && linkedDebtId){ const s=debtStats(DB.debts.find(d=>d.id===linkedDebtId)); toast('已关联「'+debtName(linkedDebtId)+'」，剩余本金 '+fmtRM(s.remaining)); }
+  if(isTransfer){ toast('内部调拨：'+acctName(fromAccount)+' → '+acctName(toAccount)+' '+fmtRM(amount)); }
   autoSave(); render();
 }
 function cancelEdit(){ editingId=null; render(); }
@@ -624,13 +728,19 @@ function cancelEdit(){ editingId=null; render(); }
 function viewDetail(){
   const rows = DB.records;
   let body = rows.length? rows.map(r=>{
-    const cls=r.type==='收入'?'income':'expense';
+    const isT=!!r.isTransfer;
+    const cls=isT?'transfer':(r.type==='收入'?'income':'expense');
     const partyLine = r.borrowFrom? `<br><span class="muted">← ${esc(r.borrowFrom)}</span>` : (r.payTo? `<br><span class="muted">→ ${esc(r.payTo)}</span>` : '');
-    const transferLine = (r.transferFrom||r.transferTo)? `<br><span class="muted">💸 ${esc(r.transferFrom||'')}→${esc(r.transferTo||'')}</span>` : '';
+    const payerLine = r.payer? `<br><span class="muted">付款方：${esc(r.payer)}</span>` : '';
+    const transferLine = (r.transferFrom||r.transferTo)? `<br><span class="muted">👤 ${esc(r.transferFrom||'')}→${esc(r.transferTo||'')}</span>` : '';
+    const acctLine = isT? `<br><span class="muted">💸 ${esc(acctName(r.fromAccount))} → ${esc(acctName(r.toAccount))}</span>` : '';
+    const typePill = isT? '<span class="pill" style="background:rgba(123,97,255,.25);color:#cbbcff">内部调拨</span>' : `<span class="pill ${r.type==='收入'?'ok':'gray'}">${r.type}</span>`;
+    const sign = isT? '' : (r.type==='收入'?'+':'-');
+    const amtColor = isT? 'var(--muted)' : (r.type==='收入'?'var(--ok)':'var(--danger)');
     return `<tr class="${cls}">
       <td>${esc(r.date)}<br><span class="muted">${esc(r.member)}</span></td>
-      <td><span class="pill ${r.type==='收入'?'ok':'gray'}">${r.type}</span><br><span class="pill">${esc(r.category)}</span>${partyLine}${transferLine}</td>
-      <td class="amt"><span class="rm">${fmtRM(r.amount)}</span>${r.linkedDebtId?'<br><span class="pill gray">🔗'+esc(debtName(r.linkedDebtId))+'</span>':''}</td>
+      <td>${typePill}<br><span class="pill">${esc(r.category)}</span>${partyLine}${payerLine}${transferLine}${acctLine}</td>
+      <td class="amt"><span class="rm" style="color:${amtColor}">${sign}${fmtRM(r.amount)}</span>${r.linkedDebtId?'<br><span class="pill gray">🔗'+esc(debtName(r.linkedDebtId))+'</span>':''}</td>
       <td><span class="muted">${esc(r.location||'')}</span>${r.orderNo?'<br><span class="muted">#'+esc(r.orderNo)+'</span>':''}${r.item?'<br><span class="muted">🛒 '+esc(r.item)+'</span>':''}</td>
       <td>
         <button class="btn sm" onclick="editRecord('${r.id}')">改</button>
@@ -812,22 +922,22 @@ function viewStats(){
   const now=todayStr(); const ym=now.slice(0,7); const yr=now.slice(0,4); const mon=weekMonday(now);
   // 今日收支
   let tInc=0,tOut=0;
-  DB.records.forEach(r=>{ if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
   let wInc=0,wOut=0;
-  DB.records.forEach(r=>{ if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
   let inc=0,out=0;
-  DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if(monthKey(r.date)===ym){ if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
   // 全年
   let yInc=0,yOut=0;
-  DB.records.forEach(r=>{ if((r.date||'').slice(0,4)===yr){ if(r.type==='收入') yInc+=Number(r.amount)||0; else yOut+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; if((r.date||'').slice(0,4)===yr){ if(r.type==='收入') yInc+=Number(r.amount)||0; else yOut+=Number(r.amount)||0; } });
   // 按月柱状（全年）
   const months={}; for(let i=1;i<=12;i++){ const m=yr+'-'+String(i).padStart(2,'0'); months[m]={inc:0,out:0}; }
-  DB.records.forEach(r=>{ const k=monthKey(r.date); if(months[k]){ if(r.type==='收入') months[k].inc+=Number(r.amount)||0; else months[k].out+=Number(r.amount)||0; } });
+  DB.records.forEach(r=>{ if(r.isTransfer) return; const k=monthKey(r.date); if(months[k]){ if(r.type==='收入') months[k].inc+=Number(r.amount)||0; else months[k].out+=Number(r.amount)||0; } });
   const maxM=Math.max(1,...Object.values(months).map(m=>m.inc+m.out));
   // 成员
-  const memStats=STAT_MEMBERS.map(m=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.member===m){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {m,i,o,bal:i-o}; });
+  const memStats=STAT_MEMBERS.map(m=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.member===m){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {m,i,o,bal:i-o}; });
   // 分类饼图（本月支出）
-  const catMap={}; DB.records.forEach(r=>{ if(r.type==='支出'&&monthKey(r.date)===ym){ catMap[r.category]=(catMap[r.category]||0)+Number(r.amount)||0; } });
+  const catMap={}; DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.type==='支出'&&monthKey(r.date)===ym){ catMap[r.category]=(catMap[r.category]||0)+Number(r.amount)||0; } });
   const catArr=Object.entries(catMap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v);
   const totalCat=catArr.reduce((s,c)=>s+c.v,0);
   const palette=['#b9aedc','#cdbbe6','#a99bdc','#d9d2ea','#9b8fc9','#e0daf0','#8b7fc7','#cabff0','#b3a7d6','#ddd6ee','#7d6fbf','#e6e1f3','#a892d8','#c2b3e8'];
@@ -836,19 +946,14 @@ function viewStats(){
   const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:rgba(255,255,255,.1)';
   const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : '<span class="muted">本月暂无支出</span>';
 
-  // 支付方式现金流分组：现金=现金；银行=RHB Bank；小资贷款=PayLater 债务合计(剩余待还本金)；其余=电子钱包
+  // 账户现金流：各账户收入/支出（不含内部调拨）+ 当前余额（含调拨）；小资贷款显示剩余待还本金
   const payLaterDebts=getPayLaterDebts();
   const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
   const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
-  const payLaterPMs=new Set(payLaterDebts.map(d=>d.payMethod).filter(Boolean));
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
-  const pmGroups=[
-    {label:'💵 现金', test:m=>m==='现金'},
-    {label:'🏦 银行 (RHB)', test:m=>m==='RHB Bank'},
-    {label:plLabel, test:m=>payLaterPMs.has(m), paylater:true},
-    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'&&!payLaterPMs.has(m)}
-  ];
-  const pmStat=pmGroups.map(g=>{ if(g.paylater){ let i=0,o=0; DB.records.forEach(r=>{ if(payLaterPMs.has(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:payLaterRemain}; } let i=0,o=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:i-o}; });
+  const acctBal=computeAccountBalances();
+  const pmStat=DB.accounts.map(a=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
+  pmStat.push({label:plLabel, i:0, o:0, bal:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)});
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
   const bars=Object.entries(months).map(([m,v])=>{
     const tot=v.inc+v.out; const h=(tot/maxM*100);
@@ -920,6 +1025,7 @@ function viewBudget(){
   const ym=todayStr().slice(0,7); const mon=weekMonday(todayStr()); const today=todayStr();
   let monthOut=0, weekOut=0, dayOut=0; const catSpend={};
   DB.records.forEach(r=>{
+    if(r.isTransfer) return;
     if(r.type==='支出'){
       if(monthKey(r.date)===ym){ monthOut+=Number(r.amount)||0; catSpend[r.category]=(catSpend[r.category]||0)+Number(r.amount)||0; }
       if(weekMonday(r.date)===mon){ weekOut+=Number(r.amount)||0; }
@@ -1021,8 +1127,200 @@ function viewLibrary(){
       • 债务结清后状态改【已结清】，不再计入月度负债支出<br>
       • 关联债务后系统按实际还款自动核算剩余本金与期数
     </div>
+  </div>
+  <div class="card">
+    <h2>💳 账户管理 <span class="tag">多账户资金联动</span></h2>
+    <div class="hint" style="margin-bottom:10px">各账户余额由记账流水自动汇总（收入加、支出减）。在「记账 → 资金转账」里同时选择<b>转出/转入账户</b>，即为内部调拨：只在一进一出间转移，不计入收支总额。</div>
+    <div id="acctList"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="fld"><span class="lb">新增账户名称</span><input id="na_name" placeholder="如：GX Bank / 现金2"></label>
+      <label class="fld"><span class="lb">类型</span>
+        <select id="na_type">
+          <option value="cash">现金</option>
+          <option value="bank">银行</option>
+          <option value="ewallet">电子钱包</option>
+          <option value="custom">自定义</option>
+        </select></label>
+    </div>
+    <button class="btn primary" onclick="addAccount()">➕ 添加账户</button>
+  </div>
+  <div class="card">
+    <h2>🤝 往来对象库 <span class="tag">付款方 / 转账人</span></h2>
+    <div class="muted" style="margin-bottom:8px">收入「付款方」、资金转账「转账人 / 转账给谁」都从这里选（也可手写）。用于明细与日历展示。</div>
+    <div class="chips" id="cpartyList"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="fld"><span class="lb">新增往来对象</span><input id="nc_name" placeholder="如：公司 / 老李"></label>
+    </div>
+    <button class="btn primary" onclick="addCounterparty()">➕ 添加往来对象</button>
   </div>`;
 }
+function renderAcctList(){
+  const el=document.getElementById('acctList'); if(!el) return;
+  const bal=computeAccountBalances();
+  el.innerHTML=DB.accounts.map(a=>`<div class="recent-row">
+    <div class="rr-left"><div>${esc(a.name)}</div><div class="rr-sub">${a.type==='cash'?'现金':a.type==='bank'?'银行':a.type==='ewallet'?'电子钱包':'自定义'}</div></div>
+    <div style="display:flex;align-items:center;gap:10px"><span class="rr-amt" style="color:${bal[a.id]<0?'var(--danger)':'var(--ok)'}">${fmtRM(bal[a.id]||0)}</span><button class="btn sm danger" onclick="delAccount('${a.id}')">删</button></div>
+  </div>`).join('') || '<div class="empty">暂无账户</div>';
+}
+function renderCpartyList(){
+  const el=document.getElementById('cpartyList'); if(!el) return;
+  el.innerHTML=DB.counterparties.map(c=>`<span class="chip">${esc(c)} <span style="cursor:pointer;color:var(--danger)" onclick="delCounterparty('${esc(c)}')">✕</span></span>`).join('');
+}
+function addAccount(){
+  const n=document.getElementById('na_name').value.trim();
+  if(!n){ toast('请填写账户名称'); return; }
+  const t=document.getElementById('na_type').value;
+  DB.accounts.push({id:uid(),name:n,type:t,balance:0});
+  autoSave(); render();
+  toast('已添加账户：'+n);
+}
+function delAccount(id){
+  if(DB.accounts.length<=1){ toast('至少保留一个账户'); return; }
+  if(!confirm('删除该账户？已关联的内部调拨记录将显示为「已删除账户」。')) return;
+  DB.accounts=DB.accounts.filter(a=>a.id!==id);
+  DB.records.forEach(r=>{ if(r.fromAccount===id) r.fromAccount=''; if(r.toAccount===id) r.toAccount=''; });
+  autoSave(); render();
+}
+function addCounterparty(){
+  const n=document.getElementById('nc_name').value.trim();
+  if(!n){ toast('请填写往来对象'); return; }
+  if(!DB.counterparties.includes(n)) DB.counterparties.push(n);
+  autoSave(); render();
+  toast('已添加往来对象：'+n);
+}
+function delCounterparty(n){ DB.counterparties=DB.counterparties.filter(c=>c!==n); autoSave(); render(); }
+
+/* ============ 模块：日历收支统计 ============ */
+function viewCalendar(){
+  if(calView==='year') return viewCalendarYear();
+  return viewCalendarMonth();
+}
+function calMonthTotals(y,m){
+  const ym=y+'-'+String(m).padStart(2,'0');
+  let inc=0,out=0,trf=0;
+  DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.isTransfer){ trf+=Number(r.amount)||0; } else if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
+  return {inc,out,trf,bal:inc-out};
+}
+function viewCalendarMonth(){
+  const y=calY,m=calM;
+  const t=calMonthTotals(y,m);
+  const first=new Date(y,m-1,1); const lead=(first.getDay()===0?6:first.getDay()-1);
+  const days=new Date(y,m,0).getDate();
+  const wk=['一','二','三','四','五','六','日'];
+  let cells='';
+  for(let i=0;i<lead;i++) cells+='<div></div>';
+  for(let d=1;d<=days;d++){
+    const ds=y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    let inc=0,out=0,trf=0;
+    DB.records.forEach(r=>{ if(r.date===ds){ if(r.isTransfer) trf+=Number(r.amount)||0; else if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
+    const has=inc>0||out>0||trf>0;
+    const todayMark = ds===todayStr()? 'box-shadow:0 0 0 2px var(--purple-deep) inset;':'';
+    cells+=`<div onclick="openDayModal('${ds}')" style="border:1px solid var(--line);border-radius:12px;padding:6px 4px;min-height:54px;cursor:pointer;background:${has?'rgba(185,174,220,.12)':'transparent'};${todayMark}">
+      <div style="font-size:12px;color:var(--muted)">${d}</div>
+      ${inc>0?`<div style="font-size:10px;color:var(--ok);line-height:1.3">+${fmtRM(inc).replace('RM ','')}</div>`:''}
+      ${out>0?`<div style="font-size:10px;color:var(--danger);line-height:1.3">-${fmtRM(out).replace('RM ','')}</div>`:''}
+      ${trf>0?`<div style="font-size:10px;color:var(--purple-deep);line-height:1.3">⇄${fmtRM(trf).replace('RM ','')}</div>`:''}
+    </div>`;
+  }
+  return `
+  <div class="card">
+    <h2>📅 日历收支统计 <span class="tag">${y}年${m}月</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">收入</div><div class="v in">${fmtRM(t.inc)}</div></div>
+      <div class="stat"><div class="mini">支出</div><div class="v out">${fmtRM(t.out)}</div></div>
+      <div class="stat"><div class="mini">结余</div><div class="v">${fmtRM(t.bal)}</div></div>
+    </div>
+    ${t.trf>0?`<div class="muted" style="margin-top:6px;font-size:11px;color:var(--purple-deep)">本月内部调拨合计 ${fmtRM(t.trf)}（不计入收支）</div>`:''}
+    <div class="seg" style="margin-top:12px">
+      <button class="${calView==='month'?'on':''}" onclick="calView='month';render()">月视图</button>
+      <button class="${calView==='year'?'on':''}" onclick="calView='year';render()">年视图</button>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button class="btn sm" onclick="prevMonth()">‹ 上月</button>
+      <div style="font-weight:700">${y} 年 ${m} 月</div>
+      <button class="btn sm" onclick="nextMonth()">下月 ›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px">
+      ${wk.map(w=>`<div style="text-align:center;font-size:11px;color:var(--muted)">${w}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">${cells}</div>
+    <div class="muted" style="margin-top:10px;font-size:11px">点击任意日期查看当日明细；<span style="color:var(--ok)">绿=收入</span> / <span style="color:var(--danger)">红=支出</span> / <span style="color:var(--purple-deep)">紫⇄=内部调拨</span>。</div>
+  </div>`;
+}
+function viewCalendarYear(){
+  const y=calY;
+  let cells='';
+  for(let m=1;m<=12;m++){
+    const t=calMonthTotals(y,m);
+    cells+=`<div onclick="calY=${y};calM=${m};calView='month';render()" style="border:1px solid var(--line);border-radius:12px;padding:10px 6px;cursor:pointer;background:${(t.inc>0||t.out>0)?'rgba(185,174,220,.12)':'transparent'}">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${m}月</div>
+      <div style="font-size:10px;color:var(--ok);line-height:1.4">收 ${fmtRM(t.inc).replace('RM ','')}</div>
+      <div style="font-size:10px;color:var(--danger);line-height:1.4">支 ${fmtRM(t.out).replace('RM ','')}</div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.4">余 ${fmtRM(t.bal).replace('RM ','')}</div>
+    </div>`;
+  }
+  return `
+  <div class="card">
+    <h2>📅 日历收支统计 <span class="tag">${y} 年视图</span></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">年收入</div><div class="v in">${fmtRM(yearInc(y))}</div></div>
+      <div class="stat"><div class="mini">年支出</div><div class="v out">${fmtRM(yearOut(y))}</div></div>
+      <div class="stat"><div class="mini">年结余</div><div class="v">${fmtRM(yearInc(y)-yearOut(y))}</div></div>
+    </div>
+    <div class="seg" style="margin-top:12px">
+      <button class="${calView==='month'?'on':''}" onclick="calView='month';render()">月视图</button>
+      <button class="${calView==='year'?'on':''}" onclick="calView='year';render()">年视图</button>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <button class="btn sm" onclick="prevYear()">‹ ${y-1}</button>
+      <div style="font-weight:700">${y} 年</div>
+      <button class="btn sm" onclick="nextYear()">${y+1} ›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${cells}</div>
+    <div class="muted" style="margin-top:10px;font-size:11px">点击某月进入该月日视图。</div>
+  </div>`;
+}
+function yearInc(y){ let s=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if((r.date||'').slice(0,4)===String(y)&&r.type==='收入') s+=Number(r.amount)||0; }); return s; }
+function yearOut(y){ let s=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if((r.date||'').slice(0,4)===String(y)&&r.type==='支出') s+=Number(r.amount)||0; }); return s; }
+function prevMonth(){ if(calM===1){calM=12;calY--;}else calM--; render(); }
+function nextMonth(){ if(calM===12){calM=1;calY++;}else calM++; render(); }
+function prevYear(){ calY--; render(); }
+function nextYear(){ calY++; render(); }
+function openDayModal(ds){
+  const el=document.getElementById('dayModal');
+  document.getElementById('dayModalTitle').textContent=ds+' 收支明细';
+  const rows=DB.records.filter(r=>r.date===ds);
+  const inc=rows.filter(r=>!r.isTransfer&&r.type==='收入').reduce((s,r)=>s+Number(r.amount)||0,0);
+  const out=rows.filter(r=>!r.isTransfer&&r.type==='支出').reduce((s,r)=>s+Number(r.amount)||0,0);
+  const trf=rows.filter(r=>r.isTransfer).reduce((s,r)=>s+Number(r.amount)||0,0);
+  const body = rows.length? rows.map(r=>{
+    const isT=!!r.isTransfer;
+    const color=isT?'var(--muted)':(r.type==='收入'?'var(--ok)':'var(--danger)');
+    const sign=isT?'':(r.type==='收入'?'+':'-');
+    const extra=isT?`<div class="muted" style="font-size:11px">💸 ${esc(acctName(r.fromAccount))} → ${esc(acctName(r.toAccount))}</div>`:'';
+    const party=r.payer?`<div class="muted" style="font-size:11px">付款方：${esc(r.payer)}</div>`:((r.transferFrom||r.transferTo)?`<div class="muted" style="font-size:11px">👤 ${esc(r.transferFrom||'')}→${esc(r.transferTo||'')}</div>`:'');
+    return `<div class="recent-row">
+      <div class="rr-left"><div>${isT?'内部调拨':esc(r.type)+' · '+esc(r.category)}</div>${party}${extra}</div>
+      <div class="rr-amt" style="color:${color}">${sign}${fmtRM(r.amount)}</div>
+    </div>`;
+  }).join('') : '<div class="empty">当日无记录</div>';
+  document.getElementById('dayModalBody').innerHTML=
+    `<div class="stat-grid" style="margin-bottom:10px">
+      <div class="stat"><div class="mini">收入</div><div class="v in">${fmtRM(inc)}</div></div>
+      <div class="stat"><div class="mini">支出</div><div class="v out">${fmtRM(out)}</div></div>
+      <div class="stat"><div class="mini">结余</div><div class="v">${fmtRM(inc-out)}</div></div>
+    </div>
+    ${trf>0?`<div class="muted" style="font-size:11px;color:var(--purple-deep);margin-bottom:8px">内部调拨 ${fmtRM(trf)}（不计入收支）</div>`:''}
+    ${body}
+    <div class="btn-row" style="margin-top:10px"><button class="btn primary" onclick="closeDayModal();go('quick')">➕ 记一笔</button></div>`;
+  el.classList.add('show');
+}
+function closeDayModal(){ const el=document.getElementById('dayModal'); if(el) el.classList.remove('show'); }
+function bindCalendar(){}
 
 /* ============ 模块：备份 ============ */
 function viewBackup(){
@@ -1143,13 +1441,13 @@ function shareOrDownload(blob,name){
   }
 }
 function csvString(){
-  const head=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','物品','转账人','转账给谁','关联债务'];
-  const lines=[head.join(',')].concat(DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,r.item||'',r.transferFrom||'',r.transferTo||'',debtName(r.linkedDebtId)].map(csvCell).join(',')));
+  const head=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','物品','转账人','转账给谁','关联债务','付款方','转出账户','转入账户','是否内部调拨'];
+  const lines=[head.join(',')].concat(DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,r.item||'',r.transferFrom||'',r.transferTo||'',debtName(r.linkedDebtId),r.payer||'',acctName(r.fromAccount),acctName(r.toAccount),r.isTransfer?'是':'否'].map(csvCell).join(',')));
   return lines.join('\n');
 }
 function exportExcel(){
-  const recHeaders=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','物品','转账人','转账给谁','关联债务'];
-  const recRows=DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,r.item||'',r.transferFrom||'',r.transferTo||'',debtName(r.linkedDebtId)]);
+  const recHeaders=['日期','收支类型','金额','消费分类','地点','单号','支付方式','交易类型','成员','借款人','还给谁','备注','物品','转账人','转账给谁','关联债务','付款方','转出账户','转入账户','是否内部调拨'];
+  const recRows=DB.records.map(r=>[r.date,r.type,r.amount,r.category,r.location,r.orderNo,r.payMethod,r.txnType,r.member,r.borrowFrom||'',r.payTo||'',r.note,r.item||'',r.transferFrom||'',r.transferTo||'',debtName(r.linkedDebtId),r.payer||'',acctName(r.fromAccount),acctName(r.toAccount),r.isTransfer?'是':'否']);
   const debtHeaders=['债务名称','总金额','分期期数','月供','已还期数','剩余期数','剩余本金','起始日期','支付方式','状态','备注'];
   const debtRows=DB.debts.map(d=>{const s=debtStats(d);return [d.name,d.totalAmount,d.installments,d.monthlyPayment,s.paidPeriods,s.remainingPeriods,s.remaining,d.startDate,d.payMethod,d.status,d.note];});
   const budHeaders=['项目','金额'];
@@ -1192,7 +1490,7 @@ function importFile(input){
       const name=f.name.toLowerCase();
       if(name.endsWith('.json')){
         const d=JSON.parse(e.target.result);
-        if(d&&d.records){ DB=d; ensurePayLaterDebt(); migrateData(); toast('✅ JSON 备份恢复成功'); }
+        if(d&&d.records){ DB=d; ensurePayLaterDebt(); migrateData(); ensureAccounts(); toast('✅ JSON 备份恢复成功'); }
         else toast('文件格式不正确');
       } else {
         DB.records=parseCSV(e.target.result).map(mapRecRow);
@@ -1204,12 +1502,17 @@ function importFile(input){
   };
   reader.readAsText(f,'utf-8');
 }
+function acctIdByName(n){ if(!n) return ''; const a=DB.accounts.find(x=>x.name===String(n).trim()); return a?a.id:''; }
 function mapRecRow(o){
+  const fa=acctIdByName(o['转出账户']||''); const ta=acctIdByName(o['转入账户']||'');
+  const isT=o['是否内部调拨']==='是' && fa && ta && fa!==ta;
   return {id:uid(),date:o['日期']||todayStr(),type:o['收支类型']==='收入'?'收入':'支出',
     amount:parseFloat(o['金额'])||0,category:o['消费分类']||'',location:o['地点']||'',orderNo:o['单号']||'',
     item:o['物品']||'',payMethod:o['支付方式']||'',txnType:o['交易类型']||'',member:o['成员']||'',
     borrowFrom:o['借款人']||'',payTo:o['还给谁']||'',note:o['备注']||'',
-    transferFrom:o['转账人']||'',transferTo:o['转账给谁']||'',linkedDebtId:''};
+    transferFrom:o['转账人']||'',transferTo:o['转账给谁']||'',
+    payer:o['付款方']||'',
+    fromAccount:isT?fa:'', toAccount:isT?ta:'', isTransfer:!!isT, linkedDebtId:''};
 }
 function mapDebtRow(o){
   return {id:uid(),name:o['债务名称']||'未命名',totalAmount:parseFloat(o['总金额'])||0,
@@ -1344,6 +1647,7 @@ async function cloudPull(){
       DB=data;
       ensurePayLaterDebt();
       migrateData();
+      ensureAccounts();
       save();
       SUPPRESS_AUTO_CLOUD=false;
       renderNav(); render();
