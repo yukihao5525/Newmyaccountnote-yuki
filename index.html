@@ -378,6 +378,13 @@ function viewOverview(){
   let mInc=0,mOut=0;
   DB.records.forEach(r=>{ if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
   const dayBudget=DB.budgets.daily||0;
+  // 资金分布：现金 / 银行(RHB) / 电子钱包（累计净额 = 收入 - 支出）
+  const pmGroups=[
+    {label:'💵 现金', test:m=>m==='现金'},
+    {label:'🏦 银行', test:m=>m==='RHB Bank'},
+    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'}
+  ];
+  const pmStat=pmGroups.map(g=>{ let v=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ v+= (r.type==='收入'?1:-1)*(Number(r.amount)||0); } }); return {label:g.label,v}; });
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
@@ -388,6 +395,13 @@ function viewOverview(){
       <h2>欢迎回来 ✨</h2>
       <div class="oh-sub">${now} · 记录今天的每一笔</div>
     </div>
+  </div>
+  <div class="card">
+    <h2>💰 资金分布 <span class="tag">现金 / 银行 / 电子钱包</span></h2>
+    <div class="stat-grid-2">
+      ${pmStat.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.v<0?'var(--danger)':'var(--ok)'}">${fmtRM(s.v)}</div></div>`).join('')}
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:11px">各渠道累计净流入（收入−支出）；现金=现金，银行=RHB Bank，其余支付方式计入电子钱包</div>
   </div>
   <div class="card">
     <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
@@ -774,11 +788,11 @@ function viewStats(){
   const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:rgba(255,255,255,.1)';
   const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : '<span class="muted">本月暂无支出</span>';
 
-  // 支付方式现金流分组：现金=现金；银行=RHB Bank；其余=网银
+  // 支付方式现金流分组：现金=现金；银行=RHB Bank；其余=电子钱包
   const pmGroups=[
     {label:'💵 现金', test:m=>m==='现金'},
     {label:'🏦 银行 (RHB)', test:m=>m==='RHB Bank'},
-    {label:'📱 网银', test:m=>m!=='现金'&&m!=='RHB Bank'}
+    {label:'📱 电子钱包', test:m=>m!=='现金'&&m!=='RHB Bank'}
   ];
   const pmStat=pmGroups.map(g=>{ let i=0,o=0; DB.records.forEach(r=>{ if(g.test(r.payMethod)){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:g.label,i,o,bal:i-o}; });
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
@@ -836,9 +850,9 @@ function viewStats(){
     <table><thead><tr><th>成员</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${memRows}</tbody></table>
   </div>
   <div class="card">
-    <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 网银</span></h2>
+    <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 电子钱包</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
-    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等及"其他"）均计入网银</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等及"其他"）均计入电子钱包</div>
   </div>
   <div class="card">
     <h2>🥧 消费分类占比（本月支出）</h2>
