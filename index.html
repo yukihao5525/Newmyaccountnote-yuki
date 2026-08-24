@@ -846,13 +846,13 @@ function viewStats(){
     <div class="muted" style="margin-top:6px"><span style="color:var(--ok)">■</span> 收入&nbsp;&nbsp;<span style="color:var(--danger)">■</span> 支出</div>
   </div>
   <div class="card">
-    <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
-    <table><thead><tr><th>成员</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${memRows}</tbody></table>
-  </div>
-  <div class="card">
     <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 电子钱包</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
     <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank；其余支付方式（微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等及"其他"）均计入电子钱包</div>
+  </div>
+  <div class="card">
+    <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
+    <table><thead><tr><th>成员</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${memRows}</tbody></table>
   </div>
   <div class="card">
     <h2>🥧 消费分类占比（本月支出）</h2>
