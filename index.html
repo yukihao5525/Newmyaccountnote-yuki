@@ -245,9 +245,9 @@ const OPTIONS = {
   incomeTypes:['收入','支出'],
   incomeCats:['工资','奖金','兼职','理财收益','红包','其他收入','借款','小说收益','档口收益','资金转账','买卖'],
   expenseCats:['餐饮','资金转账','交通','购物','孩子','电子烟','香烟','瓜果蔬菜','利息','Shopee','拼多多','淘宝','京东','抖音','车贷','水费','电费','TM Unifi','通讯','红事','白事','娱乐','借出','还款','预支','医疗','加油','维修','保险','学杂费','旅游','婴儿用品','生计用品','家庭用品','日常用品','SPEED 99','7 ELEVEN','LONGWAN','电器','电子产品','保健品','水族用品','宠物用品'],
-  items:['面包','蛋糕','冰淇淋','零食','粿条汤','云吞面','爪哇面','炒粿条','意大利面','Nugget','炸鸡','薯条','炒饭','鸡饭','碟仔饭','韩式饭/面','经济饭','Nasi Lemak','Laksa','文具','服装（衣裤鞋袜/内衣裤）','卫生棉','蔬菜','鸡肉','猪肉','海鲜（鱼/虾/蟹）','零件','五金件','车载用品','厨房用品'],
+  items:['面包','蛋糕','冰淇淋','零食','粿条汤','云吞面','爪哇面','炒粿条','意大利面','Nugget','炸鸡','薯条','炒饭','鸡饭','碟仔饭','韩式饭/面','经济饭','Nasi Lemak','Laksa','文具','服装（衣裤鞋袜/内衣裤）','卫生棉','蔬菜','鸡肉','猪肉','海鲜（鱼/虾/蟹）','零件','五金件','车载用品','厨房用品','白咖啡冰','PIZZA🍕','寿司🍣','华夫饼🧇','Mc Donald','KFC','满煎糕','塔可 TACO','卤肉','汉堡🍔Burger','榴莲','山竹'],
   members:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','母女仨','家婆','妹妹','爸爸','妈妈','叔叔','朋友'],
-  locations:['28间','二街','长城咖啡店','77咖啡店','百福叻沙','家园咖啡店','中兴咖啡店','国记点心','45菜市场','LOTUS','ECONSAVE','HASANI BOOK','ECO','MR DIY','EASY HOME','UTC巴刹','老街场','UTC','MIXUE蜜雪','TAMAN KELADI','TAMAN INTAN','其他'],
+  locations:['28间','二街','长城咖啡店','77咖啡店','百福叻沙','家园咖啡店','中兴咖啡店','国记点心','银火饮食中心','食全食美饮食广场','鸿运咖啡店','88咖啡店','大年咖啡店','The Store','Aman Jaya','45菜市场','LOTUS','ECONSAVE','HASANI BOOK','ECO','MR DIY','EASY HOME','UTC巴刹','老街场','UTC','MIXUE蜜雪','TAMAN KELADI','TAMAN INTAN','其他'],
   payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
   txnTypes:['CASH','DUITNOW TRANSFER','QR SCAN TRANSFER']
 };
@@ -273,7 +273,7 @@ storageOK = testStorage();
 function load(){
   try{
     const raw=localStorage.getItem(STORE_KEY);
-    if(raw){ const d=JSON.parse(raw); if(d&&d.records){ ensurePayLaterDebt(d); migrateData(d); ensureAccounts(d); ensureOpening(d); return d; } }
+    if(raw){ const d=JSON.parse(raw); if(d&&d.records){ ensurePayLaterDebt(d); ensureHonorDebt(d); migrateData(d); ensureAccounts(d); ensureOpening(d); return d; } }
   }catch(e){ console.warn('load fail',e); }
   return seed();
 }
@@ -287,20 +287,22 @@ function seed(){
       {id:uid(),name:'冰箱',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'无',note:''},
       {id:uid(),name:'车贷 ALZA',totalAmount:76356,installments:108,monthlyPayment:707,startDate:'2024-07-11',payMethod:'',status:'正常还款',note:'月供707×108=76356'},
       {id:uid(),name:'个人欠款',totalAmount:1000,installments:null,monthlyPayment:0,startDate:'',payMethod:'',status:'待结清',note:'每个星期利息100'},
-      {id:uid(),name:'Ryt PayLater',kind:'paylater',totalAmount:500,installments:0,monthlyPayment:0,startDate:'',payMethod:'Ryt PayLater',status:'正常还款',note:'小资贷款（PayLater 额度，可在本卡片修改额度/本金，概览与统计自动联动）'}
+      {id:uid(),name:'Ryt PayLater',kind:'paylater',totalAmount:500,installments:0,monthlyPayment:0,startDate:'',payMethod:'Ryt PayLater',status:'正常还款',note:'小资贷款（PayLater 额度，可在本卡片修改额度/本金，概览与统计自动联动）'},
+      {id:uid(),name:'HONOR',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'正常还款',paidAmountManual:1255,paidPeriodsManual:10,note:'已还 RM1255 / 10期；7月、8月未还款'}
     ],
     budgets:{ monthly:0, weekly:0, cat:{} },
     accounts:[
       {id:uid(),name:'现金',type:'cash',balance:0,opening:0},
       {id:uid(),name:'银行 RHB',type:'bank',balance:0,opening:0},
-      {id:uid(),name:'电子钱包',type:'ewallet',balance:0,opening:0}, // 锚点：其他 / Ryt Bank / 未知电子钱包 并入此处（始终显示）
+      {id:uid(),name:'电子钱包',type:'ewallet',balance:0,opening:0}, // 锚点：其他 / 未知电子钱包 并入此处（始终显示）
       {id:uid(),name:'微信',type:'ewallet',balance:0,opening:0},
       {id:uid(),name:'支付宝',type:'ewallet',balance:0,opening:0},
       {id:uid(),name:'Tng Ewallet',type:'ewallet',balance:0,opening:0},
       {id:uid(),name:'GX Bank',type:'ewallet',balance:0,opening:0}, // 单独成栏的电子钱包（类似支付宝/微信，需 top up）
       {id:uid(),name:'Boost',type:'ewallet',balance:0,opening:0},
       {id:uid(),name:'Grab Pay',type:'ewallet',balance:0,opening:0},
-      {id:uid(),name:'Shopee Pay',type:'ewallet',balance:0,opening:0}
+      {id:uid(),name:'Shopee Pay',type:'ewallet',balance:0,opening:0},
+      {id:uid(),name:'Ryt Bank',type:'ewallet',balance:0,opening:0} // 电子钱包的一种（Ryt PayLater 是其划分出的贷款）
     ],
     counterparties:['老公','我自己','叶诗玲','赖芊汐','陈俊伟','家婆','妹妹','爸爸','妈妈','叔叔','朋友','RHB Bank','Tng Ewallet','Shopee','公司','老板']
   };
@@ -373,6 +375,15 @@ function ensurePayLaterDebt(db){
   const has=db.debts.some(isPayLaterDebt);
   if(!has){ db.debts.push({id:uid(),name:'Ryt PayLater',kind:'paylater',totalAmount:500,installments:0,monthlyPayment:0,startDate:'',payMethod:'Ryt PayLater',status:'正常还款',note:'小资贷款（PayLater 额度，可在本卡片修改额度/本金，概览与统计自动联动）'}); }
 }
+// HONOR 债务联动：确保存在 HONOR 债务，并按用户给定现状补录「已还金额/已还期数」；仅当手动覆盖字段为空时才写入，避免覆盖用户后续手动修改
+function ensureHonorDebt(db){
+  db=db||DB;
+  if(!db.debts) db.debts=[];
+  let h=db.debts.find(d=>d.name && d.name.toUpperCase()==='HONOR');
+  if(!h){ h={id:uid(),name:'HONOR',totalAmount:0,installments:0,monthlyPayment:0,startDate:'',payMethod:'',status:'正常还款',note:'已还 RM1255 / 10期；7月、8月未还款'}; db.debts.push(h); }
+  if(h.paidAmountManual==null||h.paidAmountManual==='') h.paidAmountManual=1255;
+  if(h.paidPeriodsManual==null||h.paidPeriodsManual==='') h.paidPeriodsManual=10;
+}
 function migrateData(db){
   db=db||DB;
   if(!db.debts) db.debts=[];
@@ -383,11 +394,11 @@ function migrateData(db){
 function ensureAccounts(db){
   db=db||DB;
   if(!db.accounts||!Array.isArray(db.accounts)) db.accounts=[];
-  // 每个电子钱包支付方式都有专属账户；「电子钱包」为锚点（其他/Ryt Bank/未知电子钱包并入），始终显示
+  // 每个电子钱包支付方式都有专属账户；「电子钱包」为锚点（其他/未知电子钱包并入），始终显示
   const defs=[
     ['现金','cash'],['银行 RHB','bank'],['电子钱包','ewallet'],
     ['微信','ewallet'],['支付宝','ewallet'],['Tng Ewallet','ewallet'],
-    ['GX Bank','ewallet'],['Boost','ewallet'],['Grab Pay','ewallet'],['Shopee Pay','ewallet']
+    ['GX Bank','ewallet'],['Boost','ewallet'],['Grab Pay','ewallet'],['Shopee Pay','ewallet'],['Ryt Bank','ewallet']
   ];
   defs.forEach(([n,t])=>{ if(!db.accounts.some(a=>a.name===n)) db.accounts.push({id:uid(),name:n,type:t,opening:0}); else { const a=db.accounts.find(x=>x.name===n); if(a.opening==null) a.opening=0; } });
   // GX Bank 属电子钱包（非正规银行，类似支付宝/微信、需 top up 才能用）；若曾被误建为银行账户则纠正
@@ -414,14 +425,14 @@ function acctIdByType(t){ const a=DB.accounts.find(x=>x.type===t); return a?a.id
 // 支付方式 → 专属账户映射：现金→现金；RHB Bank→银行；各电子钱包支付方式各自成栏；其余并入「电子钱包」锚点
 const PM_EWALLET_ACCOUNT={
   '微信':'微信','支付宝':'支付宝','Tng Ewallet':'Tng Ewallet','GX Bank':'GX Bank',
-  'Boost':'Boost','Grab Pay':'Grab Pay','Shopee Pay':'Shopee Pay'
+  'Ryt Bank':'Ryt Bank','Boost':'Boost','Grab Pay':'Grab Pay','Shopee Pay':'Shopee Pay'
 };
 function accountForPayMethod(pm){
   if(!pm||/PayLater/i.test(pm)) return null; // PayLater 由债务模块单独处理
   if(pm==='现金') return acctIdByType('cash');
   if(pm==='RHB Bank') return acctIdByType('bank'); // 仅 RHB Bank 计入「银行」，与电子钱包分离（银行流水不与电子钱包混在一起）
   if(PM_EWALLET_ACCOUNT[pm]) return acctIdByName(PM_EWALLET_ACCOUNT[pm]); // 每个电子钱包支付方式各自成栏（含 GX Bank）
-  return acctIdByName('电子钱包'); // 其他 / Ryt Bank / 未知电子钱包 → 电子钱包锚点
+  return acctIdByName('电子钱包'); // 其他 / 未知电子钱包 → 电子钱包锚点
 }
 function computeAccountBalances(){
   const bal={}; DB.accounts.forEach(a=>bal[a.id]=Number(a.opening)||0); // 期初余额（opening）作为账户起始值
@@ -455,6 +466,7 @@ function visibleFundAccounts(){
     if(a.type==='cash'||a.type==='bank') return true;
     if(a.name==='电子钱包') return true;   // 锚点：始终显示
     if(a.name==='GX Bank') return true;     // 单独成栏：始终显示
+    if(a.name==='Ryt Bank') return true;    // 常用电子钱包：始终显示
     if(bal[a.id] && Math.abs(bal[a.id])>1e-9) return true; // 有余额（含期初）
     return active.has(a.id);                // 或发生过收支
   });
@@ -1071,7 +1083,7 @@ function viewStats(){
   <div class="card">
     <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 小资贷款 / 电子钱包</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
-    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；GX Bank 单独成栏电子钱包（类似支付宝/微信，需 top up）；微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等每个电子钱包支付方式各自成栏，仅当有余额或发生过收支时才显示；"其他" / Ryt Bank / 未知电子钱包 并入「电子钱包」锚点；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减）</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；GX Bank 单独成栏电子钱包（类似支付宝/微信，需 top up）；微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等每个电子钱包支付方式各自成栏，仅当有余额或发生过收支时才显示；"其他" / 未知电子钱包 并入「电子钱包」锚点；Ryt Bank 与 GX Bank 同样单独成栏电子钱包（常用）；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减）</div>
   </div>
   <div class="card">
     <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
