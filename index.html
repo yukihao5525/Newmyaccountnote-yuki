@@ -919,9 +919,9 @@ function debtCardHTML(d){
       </div>
       ${isPayLaterDebt(d)?`<div class="pi">
         <span class="lb">💳 可用额度（循环信用）</span>
-        <div class="vv" style="color:var(--ok)">${fmtRM(s.available)}</div>
+        <div class="vv" style="color:${hasAvailOverride?'var(--purple-deep)':'var(--ok)'}">${fmtRM(s.available)}</div>
         <input type="number" step="0.01" placeholder="留空=按 额度−已用 自动" value="${d.availableManual!=null&&d.availableManual!==''?d.availableManual:''}" onchange="updDebt('${d.id}','availableManual',this.value)">
-        <span class="manual-hint">= 额度 ${fmtRM(d.totalAmount||0)} − 已用 ${fmtRM(s.used)}</span>
+        <span class="manual-hint">${hasAvailOverride?('⚠️ 已手动覆盖 '+fmtRM(d.availableManual)+'：清空输入框即按 额度 '+fmtRM(d.totalAmount||0)+' − 已用 '+fmtRM(s.used)+' 自动重算（新消费会自动计入）'):('= 额度 '+fmtRM(d.totalAmount||0)+' − 已用 '+fmtRM(s.used)+'（自动）')}</span>
       </div>`:''}
       <div class="pi">
         <span class="lb">🔁 已还款期数</span>
