@@ -9,3 +9,4 @@ extract_script.js
 pl_harness.js
 generate_icons.py
 assets_upload.js
+insert_pwa.py
