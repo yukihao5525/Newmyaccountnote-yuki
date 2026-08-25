@@ -11,6 +11,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="记账台" />
   <meta name="theme-color" content="#2d1b4e" />
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
     --bg:#241733; --panel:rgba(40,38,48,.55); --ink:#e9e7ef; --muted:#a7a3b3;
@@ -149,6 +152,23 @@
   .bar{height:8px; border-radius:6px; background:rgba(255,255,255,.12); overflow:hidden; margin-top:4px;}
   .bar > i{display:block; height:100%; background:var(--purple);}
   .bar > i.over{background:var(--danger);}
+  /* 第二十五波：明细筛选 + 导出 */
+  .filter-bar{display:flex; flex-direction:column; gap:9px; padding:4px 0 2px;}
+  .filter-row{display:flex; flex-wrap:wrap; gap:7px; align-items:center; line-height:1.4;}
+  .filter-btn{padding:7px 12px; border-radius:10px; background:var(--accent-soft); color:var(--ink); border:1px solid transparent; font-size:12.5px; cursor:pointer; transition:all .12s ease; font-family:inherit;}
+  .filter-btn:hover{background:rgba(185,174,220,.28); border-color:var(--purple-soft);}
+  .filter-btn.active{background:linear-gradient(135deg, #5b3da8, #2d1b4e); color:#fff; border-color:#7b61ff; box-shadow:0 2px 6px rgba(91,61,168,.4); font-weight:600;}
+  .filter-sep{color:var(--muted); opacity:.5; margin:0 3px; user-select:none;}
+  .filter-radio{display:inline-flex; align-items:center; gap:4px; font-size:12.5px; color:var(--ink); cursor:pointer; padding:5px 9px; border-radius:9px; background:var(--accent-soft);}
+  .filter-radio input{accent-color:#7b61ff; margin:0;}
+  .filter-stat-bar{background:linear-gradient(135deg, rgba(123,97,255,.15), rgba(185,174,220,.12)); border:1px solid rgba(123,97,255,.3); border-radius:12px; padding:10px 14px; font-size:12.5px; display:flex; flex-wrap:wrap; gap:6px 9px; align-items:center; color:var(--ink); line-height:1.4;}
+  .filter-stat-bar .sep{color:var(--muted); opacity:.6;}
+  .filter-card{border:1px solid rgba(123,97,255,.35) !important; background:linear-gradient(135deg, rgba(123,97,255,.08), rgba(185,174,220,.06)) !important;}
+  .filter-card h2{color:#e7def9;}
+  .filter-card .btn.sm{background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.2);}
+  .filter-card .btn.sm:hover{background:rgba(255,255,255,.22);}
+  .filter-bar input[type=date]{padding:6px 9px; border-radius:8px; background:rgba(255,255,255,.08); border:1px solid var(--line); color:var(--ink); font-size:12.5px; font-family:inherit; color-scheme:dark;}
+  .filter-bar input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.8); cursor:pointer;}
   .lib-group{margin-bottom:12px;}
   .lib-group .lg-t{font-size:12px; font-weight:700; color:var(--purple-deep); margin-bottom:6px;}
   .chips{display:flex; flex-wrap:wrap; gap:6px;}
@@ -258,7 +278,7 @@ const OPTIONS = {
   payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
   txnTypes:['CASH','DUITNOW TRANSFER','QR SCAN TRANSFER']
 };
-const APP_VERSION='2026-08-25.3'; // 部署版本戳（手机端排查缓存用）
+const APP_VERSION='2026-08-25.4'; // 部署版本戳（手机端排查缓存用）
 const STAT_MEMBERS=['我']; // 统计·成员收支仅保留本人（其他成员仍可在记账时选「谁用了/谁给了钱」）
 const STORE_KEY='mobileWorkbenchDB_v1';
 
@@ -271,6 +291,206 @@ let storageOK=true;
 let calView='month'; // month | year
 let calY=new Date().getFullYear();
 let calM=new Date().getMonth()+1; // 1-12
+
+/* ============ 第二十五波：明细筛选 + 导出 ============ */
+let recordFilter = { mode: 'all', start: null, end: null }; // 全局筛选状态
+let exportScope = 'filtered'; // 'filtered' | 'all'  导出范围
+function _pad2(n){ return String(n).padStart(2,'0'); }
+function _ymd(d){ return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_pad2(d.getDate()); }
+function yesterdayStr(){ const d=new Date(); d.setDate(d.getDate()-1); return _ymd(d); }
+function last7StartStr(){ const d=new Date(); d.setDate(d.getDate()-6); return _ymd(d); }
+function thisMonthStartStr(){ const d=new Date(); return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-01'; }
+function thisMonthEndStr(){ const d=new Date(); return d.getFullYear()+'-'+_pad2(d.getMonth()+1)+'-'+_pad2(new Date(d.getFullYear(),d.getMonth()+1,0).getDate()); }
+
+function setFilter(mode, opts){
+  opts = opts || {};
+  if(mode==='today'){ recordFilter.mode='today'; recordFilter.start=recordFilter.end=todayStr(); }
+  else if(mode==='yesterday'){ recordFilter.mode='yesterday'; recordFilter.start=recordFilter.end=yesterdayStr(); }
+  else if(mode==='last7'){ recordFilter.mode='last7'; recordFilter.start=last7StartStr(); recordFilter.end=todayStr(); }
+  else if(mode==='thisMonth'){ recordFilter.mode='thisMonth'; recordFilter.start=thisMonthStartStr(); recordFilter.end=thisMonthEndStr(); }
+  else if(mode==='custom'){ recordFilter.mode='custom'; recordFilter.start=opts.start||todayStr(); recordFilter.end=opts.end||todayStr(); }
+  else { recordFilter.mode='all'; recordFilter.start=null; recordFilter.end=null; }
+  render();
+}
+function applyCustomFilter(){
+  const sEl = document.getElementById('filterStart');
+  const eEl = document.getElementById('filterEnd');
+  if(!sEl || !eEl) return;
+  const s = sEl.value, e = eEl.value;
+  if(!s || !e){ toast('请选择起止日期'); return; }
+  if(s > e){ toast('开始日期不能晚于结束日期'); return; }
+  setFilter('custom', {start: s, end: e});
+}
+function clearFilter(){ setFilter('all'); }
+function inFilter(dateStr){
+  if(recordFilter.mode==='all') return true;
+  if(!dateStr) return false;
+  return dateStr >= recordFilter.start && dateStr <= recordFilter.end;
+}
+function getFilteredRecords(){
+  if(recordFilter.mode==='all') return DB.records;
+  return DB.records.filter(r => inFilter(r.date));
+}
+function filterActive(){ return recordFilter.mode !== 'all'; }
+function filterLabel(){
+  const m = recordFilter.mode;
+  if(m==='all') return '全部';
+  if(m==='today') return '今天 ('+recordFilter.start+')';
+  if(m==='yesterday') return '昨天 ('+recordFilter.start+')';
+  if(m==='last7') return '近7天 ('+recordFilter.start+' ~ '+recordFilter.end+')';
+  if(m==='thisMonth') return '本月 ('+recordFilter.start+' ~ '+recordFilter.end+')';
+  if(m==='custom') return recordFilter.start===recordFilter.end ? recordFilter.start : (recordFilter.start+' ~ '+recordFilter.end);
+  return '全部';
+}
+function filterFileToken(){
+  // 文件名片段（去掉 / \ : * ? " < > |）
+  const m = recordFilter.mode;
+  let raw = '全部';
+  if(m==='today') raw = '今天';
+  else if(m==='yesterday') raw = '昨天';
+  else if(m==='last7') raw = '近7天';
+  else if(m==='thisMonth') raw = '本月';
+  else if(m==='custom') raw = recordFilter.start===recordFilter.end ? recordFilter.start : (recordFilter.start+'_至_'+recordFilter.end);
+  return raw.replace(/[\/\\:\*\?"<>\|]/g, '_');
+}
+function setExportScope(s){ exportScope = s; render(); }
+function getExportRecords(){
+  const recs = exportScope==='all' ? DB.records.slice() : getFilteredRecords();
+  return recs.sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''));
+}
+function getExportFilterToken(){
+  return exportScope==='all' ? '全部' : filterFileToken();
+}
+function exportFileName(ext){
+  const d = todayStr().replace(/-/g,'');
+  const tok = getExportFilterToken();
+  return `家庭记账_${d}_${tok}明细.${ext}`;
+}
+function _recSummary(recs){
+  let inc=0, out=0, trf=0;
+  recs.forEach(r => {
+    const a = Number(r.amount)||0;
+    if(r.isTransfer) trf += a;
+    else if(r.type==='收入') inc += a;
+    else if(r.type==='支出') out += a;
+  });
+  return { inc, out, trf, bal: inc-out, count: recs.length };
+}
+
+function exportExcel(){
+  const recs = getExportRecords();
+  if(!recs.length){ toast('没有可导出的记录'); return; }
+  if(typeof XLSX === 'undefined'){ toast('Excel 库未加载，请检查网络'); return; }
+  const sum = _recSummary(recs);
+  // 汇总 sheet
+  const summary = [
+    ['家庭记账明细导出'],
+    [],
+    ['筛选条件', getExportFilterToken()],
+    ['导出时间', todayStr()],
+    ['记录笔数', recs.length],
+    [],
+    ['总收入', Number(sum.inc.toFixed(2))],
+    ['总支出', Number(sum.out.toFixed(2))],
+    ['结余', Number(sum.bal.toFixed(2))],
+    ['内部调拨(不计收支)', Number(sum.trf.toFixed(2))],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summary);
+  wsSummary['!cols'] = [{wch:24}, {wch:24}];
+  // 明细 sheet
+  const headers = ['日期','收支类型','金额(RM)','消费分类','地点','单号','物品','支付方式','交易类型','成员','借款人','还给谁','付款方','备注','关联债务','内部调拨','起始账户','目标账户'];
+  const body = recs.map(r => [
+    r.date||'',
+    r.isTransfer ? '内部调拨' : (r.type||''),
+    Number(r.amount)||0,
+    r.category||'',
+    r.location||'',
+    r.orderNo||'',
+    r.item||'',
+    r.payMethod||'',
+    r.txnType||'',
+    r.member||'',
+    r.borrowFrom||'',
+    r.payTo||'',
+    r.payer||'',
+    r.note||'',
+    debtName(r.linkedDebtId),
+    r.isTransfer ? '是' : '否',
+    acctName(r.fromAccount),
+    acctName(r.toAccount),
+  ]);
+  const wsDetail = XLSX.utils.aoa_to_sheet([headers, ...body]);
+  wsDetail['!cols'] = [{wch:12},{wch:10},{wch:12},{wch:14},{wch:12},{wch:10},{wch:18},{wch:14},{wch:18},{wch:10},{wch:10},{wch:10},{wch:10},{wch:20},{wch:14},{wch:10},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsSummary, '汇总');
+  XLSX.utils.book_append_sheet(wb, wsDetail, '明细');
+  XLSX.writeFile(wb, exportFileName('xlsx'));
+  toast('文件已保存至浏览器下载目录');
+}
+
+function exportPDF(){
+  const recs = getExportRecords();
+  if(!recs.length){ toast('没有可导出的记录'); return; }
+  if(typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF){ toast('PDF 库未加载，请检查网络'); return; }
+  const sum = _recSummary(recs);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.width;
+  // 标题
+  doc.setFont('helvetica','bold'); doc.setFontSize(16);
+  doc.text('家庭记账明细报表', 14, 14);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.setTextColor(90);
+  doc.text(`筛选条件: ${getExportFilterToken()}    导出时间: ${todayStr()}    笔数: ${recs.length}`, 14, 20);
+  // 汇总
+  doc.setTextColor(30); doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text('汇总统计', 14, 28);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text(`总收入: RM ${sum.inc.toFixed(2)}    总支出: RM ${sum.out.toFixed(2)}    结余: RM ${sum.bal.toFixed(2)}    内部调拨(不计): RM ${sum.trf.toFixed(2)}`, 14, 34);
+  // 表格
+  const headers = [['日期','类型','分类','金额(RM)','地点','物品','支付方式','成员','关联债务','备注']];
+  const body = recs.map(r => [
+    r.date||'',
+    r.isTransfer?'内部调拨':(r.type||''),
+    r.category||'',
+    (Number(r.amount)||0).toFixed(2),
+    r.location||'',
+    r.item||'',
+    r.payMethod||'',
+    r.member||'',
+    debtName(r.linkedDebtId),
+    r.note||'',
+  ]);
+  doc.autoTable({
+    head: headers, body: body,
+    startY: 40,
+    theme: 'striped',
+    headStyles: { fillColor: [45,27,78], textColor: 255, fontSize: 9, halign: 'center' },
+    bodyStyles: { fontSize: 8, cellPadding: 1.4, textColor: 40 },
+    alternateRowStyles: { fillColor: [245,243,250] },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      1: { cellWidth: 18 },
+      2: { cellWidth: 26 },
+      3: { cellWidth: 26, halign: 'right' },
+      4: { cellWidth: 28 },
+      5: { cellWidth: 28 },
+      6: { cellWidth: 26 },
+      7: { cellWidth: 16 },
+      8: { cellWidth: 28 },
+      9: { cellWidth: 'auto' },
+    },
+    margin: { left: 10, right: 10 },
+    didDrawPage: function(){
+      const cur = doc.internal.getCurrentPageInfo().pageNumber;
+      const total = doc.internal.getNumberOfPages();
+      doc.setFontSize(8); doc.setTextColor(150);
+      doc.text(`家庭记账 · ${todayStr()} · 第 ${cur}/${total} 页`, 14, doc.internal.pageSize.height - 6);
+    },
+  });
+  doc.save(exportFileName('pdf'));
+  toast('文件已保存至浏览器下载目录');
+}
 
 function testStorage(){
   try{ const k='__wb_test__'; localStorage.setItem(k,'1'); const v=localStorage.getItem(k); localStorage.removeItem(k); return v==='1'; }
@@ -580,12 +800,19 @@ function storageBanner(){
 /* ============ 模块：概览 ============ */
 function viewOverview(){
   const now=todayStr(); const ym=now.slice(0,7); const mon=weekMonday(now);
+  const useFilter = filterActive();
+  const src = useFilter ? getFilteredRecords() : DB.records;
   let tInc=0,tOut=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
   let wInc=0,wOut=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
   let mInc=0,mOut=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
+  let fInc=0,fOut=0;
+  if(useFilter){
+    src.forEach(r=>{ if(r.isTransfer) return; if(r.type==='收入') fInc+=Number(r.amount)||0; else if(r.type==='支出') fOut+=Number(r.amount)||0; });
+  } else {
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if(monthKey(r.date)===ym){ if(r.type==='收入') mInc+=Number(r.amount)||0; else mOut+=Number(r.amount)||0; } });
+  }
   const dayBudget=DB.budgets.daily||0;
   // 资金分布：各账户余额（现金/银行/电子钱包…动态，含内部转账调拨）+ 小资贷款（PayLater 债务合计剩余待还本金）
   const acctBal=computeAccountBalances();
@@ -599,21 +826,20 @@ function viewOverview(){
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
-  return `
-  <div class="overview-hero">
-    <img class="oh-icon" src="avatar.jpg" alt="avatar">
-    <div class="oh-txt">
-      <h2>欢迎回来 ✨</h2>
-      <div class="oh-sub">${now} · 记录今天的每一笔</div>
+
+  // 筛选条 / 自然时段切换
+  const filterCard = `
+  <div class="card filter-card">
+    <h2>🔍 当前筛选：<b>${esc(filterLabel())}</b> <span class="tag">${src.length} 笔</span> <button class="btn sm" style="float:right" onclick="clearFilter()">清除筛选</button></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">筛选收入</div><div class="v in">${fmtRM(fInc)}</div></div>
+      <div class="stat"><div class="mini">筛选支出</div><div class="v out">${fmtRM(fOut)}</div></div>
+      <div class="stat"><div class="mini">筛选结余</div><div class="v">${fmtRM(fInc-fOut)}</div></div>
     </div>
-  </div>
-  <div class="card">
-    <h2>💰 资金分布 <span class="tag">多账户 · 内部调拨实时联动</span></h2>
-    <div class="stat-grid-2">
-      ${fundCards.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.paylater?'var(--danger)':(s.v<0?'var(--danger)':'var(--ok)')}">${fmtRM(s.v)}</div>${s.sub?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.sub}</div>`:''}</div>`).join('')}
-    </div>
-    <div class="muted" style="margin-top:8px;font-size:11px">各账户实时余额：由记账流水自动汇总（收入加、支出减），内部调拨只在一进一出间转移、不计入收支总额；小资贷款(Ryt PayLater)为循环信用：固定本金(额度)不变，用 Ryt PayLater 支付→增加已用、扣可用额度，还款→加已还、加可用额度，还款超过本金部分计为利息。可在「选项库 → 账户管理」增删账户。</div>
-  </div>
+    <div class="muted" style="margin-top:6px;font-size:11px">明细、统计页图表已按筛选范围重新计算。可去「明细」调整筛选条件，或点上方【清除筛选】恢复默认显示。</div>
+  </div>`;
+
+  const naturalTimeCards = `
   <div class="card">
     <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
     <div class="stat-grid">
@@ -642,7 +868,25 @@ function viewOverview(){
       <div class="stat"><div class="mini">本月净结余</div><div class="v">${fmtRM(mInc-mOut)}</div></div>
       <div class="stat"><div class="mini">待还债务本金</div><div class="v" style="color:${debtRemain>0?'var(--danger)':'var(--ok)'}">${fmtRM(debtRemain)}</div></div>
     </div>
+  </div>`;
+
+  return `
+  <div class="overview-hero">
+    <img class="oh-icon" src="avatar.jpg" alt="avatar">
+    <div class="oh-txt">
+      <h2>欢迎回来 ✨</h2>
+      <div class="oh-sub">${now} · 记录今天的每一笔</div>
+    </div>
   </div>
+  ${useFilter ? filterCard : ''}
+  <div class="card">
+    <h2>💰 资金分布 <span class="tag">多账户 · 内部调拨实时联动</span></h2>
+    <div class="stat-grid-2">
+      ${fundCards.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.paylater?'var(--danger)':(s.v<0?'var(--danger)':'var(--ok)')}">${fmtRM(s.v)}</div>${s.sub?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.sub}</div>`:''}</div>`).join('')}
+    </div>
+    <div class="muted" style="margin-top:8px;font-size:11px">各账户实时余额：由记账流水自动汇总（收入加、支出减），内部调拨只在一进一出间转移、不计入收支总额；小资贷款(Ryt PayLater)为循环信用：固定本金(额度)不变，用 Ryt PayLater 支付→增加已用、扣可用额度，还款→加已还、加可用额度，还款超过本金部分计为利息。可在「选项库 → 账户管理」增删账户。</div>
+  </div>
+  ${useFilter ? '' : naturalTimeCards}
   <div class="card">
     <h2>🕒 最近记账 <span class="tag">共 ${DB.records.length} 条</span></h2>
     ${recent.length? recent.map(r=>`
@@ -659,6 +903,7 @@ function viewOverview(){
     <div class="btn-row">
       <button class="btn primary" onclick="go('quick')">⚡ 记一笔</button>
       <button class="btn" onclick="go('debt')">💳 看债务进度</button>
+      <button class="btn" onclick="go('detail')">🔍 明细 & 筛选</button>
     </div>
     <div class="muted" style="margin-top:10px;font-size:11px">数据保存在本机浏览器（localStorage），不会上传。清空缓存将丢失记录。<br>版本 <b>v${APP_VERSION}</b>（若与此不符说明手机端仍是旧缓存，请彻底刷新/清站点数据）</div>
   </div>`;
@@ -838,7 +1083,11 @@ function cancelEdit(){ editingId=null; render(); }
 
 /* ============ 模块：记账明细（+ 债务台账在其下方） ============ */
 function viewDetail(){
-  const rows = DB.records;
+  const allRows = getFilteredRecords();
+  const rows = allRows.slice().sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.id||'').localeCompare(a.id||''));
+  const sum = _recSummary(rows);
+  const fActive = filterActive();
+  const m = recordFilter.mode;
   let body = rows.length? rows.map(r=>{
     const isT=!!r.isTransfer;
     const cls=isT?'transfer':(r.type==='收入'?'income':'expense');
@@ -858,12 +1107,54 @@ function viewDetail(){
         <button class="btn sm" onclick="editRecord('${r.id}')">改</button>
         <button class="btn sm danger" onclick="delRecord('${r.id}')">删</button>
       </td></tr>`;
-  }).join('') : `<tr><td colspan="5"><div class="empty">暂无记录，去「记账」录入第一笔吧</div></td></tr>`;
+  }).join('') : `<tr><td colspan="5"><div class="empty">${fActive?'当前筛选条件下没有记录':'暂无记录，去「记账」录入第一笔吧'}</div></td></tr>`;
 
+  const fBtn = (label, modeVal) => `<button class="filter-btn ${m===modeVal?'active':''}" onclick="setFilter('${modeVal}')">${label}</button>`;
+  const fStartVal = (recordFilter.start||'');
+  const fEndVal = (recordFilter.end||'');
   return `
   <div class="card">
-    <h2>📑 完整记账录入明细表 <span class="tag">共 ${rows.length} 笔</span></h2>
-    <div class="muted" style="margin-bottom:8px">字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜物品｜支付方式｜交易类型｜成员｜借款人/还给谁｜转账人/转账给谁｜备注｜关联债务</div>
+    <h2>🔍 筛选 & 导出 <span class="tag">${fActive?('已筛选 · '+filterLabel()):'全部记录'}</span></h2>
+    <div class="filter-bar">
+      <div class="filter-row">
+        ${fBtn('今天','today')}
+        ${fBtn('昨天','yesterday')}
+        ${fBtn('近7天','last7')}
+        ${fBtn('本月','thisMonth')}
+        ${fBtn('全部','all')}
+        <span class="filter-sep">|</span>
+        <span class="muted">自定义:</span>
+        <input type="date" id="filterStart" value="${fStartVal}" />
+        <span class="muted">至</span>
+        <input type="date" id="filterEnd" value="${fEndVal}" />
+        <button class="btn sm" onclick="applyCustomFilter()">应用</button>
+        ${fActive?'<button class="btn sm" onclick="clearFilter()">清除</button>':''}
+      </div>
+      <div class="filter-row">
+        <span class="muted">导出范围:</span>
+        <label class="filter-radio"><input type="radio" name="exportScope" value="filtered" ${exportScope==='filtered'?'checked':''} onchange="setExportScope('filtered')"> 当前筛选${fActive?('('+rows.length+')'):''}</label>
+        <label class="filter-radio"><input type="radio" name="exportScope" value="all" ${exportScope==='all'?'checked':''} onchange="setExportScope('all')"> 全部记录(${DB.records.length})</label>
+        <span class="filter-sep">|</span>
+        <button class="btn primary" onclick="exportExcel()">📊 导出 Excel</button>
+        <button class="btn primary" onclick="exportPDF()">📄 导出 PDF</button>
+      </div>
+      <div class="filter-stat-bar">
+        <b>当前筛选：${esc(filterLabel())}</b>
+        <span class="sep">·</span>
+        共 <b>${rows.length}</b> 笔
+        <span class="sep">·</span>
+        收入 <span style="color:var(--ok)"><b>${fmtRM(sum.inc)}</b></span>
+        <span class="sep">·</span>
+        支出 <span style="color:var(--danger)"><b>${fmtRM(sum.out)}</b></span>
+        <span class="sep">·</span>
+        结余 <b style="color:${sum.bal>=0?'var(--ok)':'var(--danger)'}">${fmtRM(sum.bal)}</b>
+        ${sum.trf?`<span class="sep">·</span>内部调拨 <span class="muted">${fmtRM(sum.trf)}</span>`:''}
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📑 完整记账录入明细表 <span class="tag">${fActive?('已筛 '+rows.length+' / 共 '+DB.records.length+' 笔'):('共 '+rows.length+' 笔')}</span></h2>
+    <div class="muted" style="margin-bottom:8px">${fActive?'⚠️ 当前仅展示筛选范围内的记录（默认按日期倒序，最新置顶）。要查看全部请点【全部】或【清除】。':'字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜物品｜支付方式｜交易类型｜成员｜借款人/还给谁｜转账人/转账给谁｜备注｜关联债务'}</div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>日期/成员</th><th>类型/分类</th><th>金额</th><th>地点/单号/物品</th><th>操作</th></tr></thead>
       <tbody>${body}</tbody>
@@ -1045,40 +1336,52 @@ function weekMonday(dateStr){
 }
 function viewStats(){
   const now=todayStr(); const ym=now.slice(0,7); const yr=now.slice(0,4); const mon=weekMonday(now);
-  // 今日收支
+  const useFilter = filterActive();
+  const src = useFilter ? getFilteredRecords() : DB.records;
+  // 筛选汇总
+  let fInc=0,fOut=0;
+  src.forEach(r=>{ if(r.isTransfer) return; if(r.type==='收入') fInc+=Number(r.amount)||0; else if(r.type==='支出') fOut+=Number(r.amount)||0; });
+  // 自然时段（不筛选时计算）
   let tInc=0,tOut=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
   let wInc=0,wOut=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
   let inc=0,out=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if(monthKey(r.date)===ym){ if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
-  // 全年
   let yInc=0,yOut=0;
-  DB.records.forEach(r=>{ if(r.isTransfer) return; if((r.date||'').slice(0,4)===yr){ if(r.type==='收入') yInc+=Number(r.amount)||0; else yOut+=Number(r.amount)||0; } });
-  // 按月柱状（全年）
+  if(!useFilter){
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.date===now){ if(r.type==='收入') tInc+=Number(r.amount)||0; else tOut+=Number(r.amount)||0; } });
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if(weekMonday(r.date)===mon){ if(r.type==='收入') wInc+=Number(r.amount)||0; else wOut+=Number(r.amount)||0; } });
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if(monthKey(r.date)===ym){ if(r.type==='收入') inc+=Number(r.amount)||0; else out+=Number(r.amount)||0; } });
+    // 全年
+    DB.records.forEach(r=>{ if(r.isTransfer) return; if((r.date||'').slice(0,4)===yr){ if(r.type==='收入') yInc+=Number(r.amount)||0; else yOut+=Number(r.amount)||0; } });
+  }
+  // 按月柱状（全年，仍用全量）
   const months={}; for(let i=1;i<=12;i++){ const m=yr+'-'+String(i).padStart(2,'0'); months[m]={inc:0,out:0}; }
   DB.records.forEach(r=>{ if(r.isTransfer) return; const k=monthKey(r.date); if(months[k]){ if(r.type==='收入') months[k].inc+=Number(r.amount)||0; else months[k].out+=Number(r.amount)||0; } });
   const maxM=Math.max(1,...Object.values(months).map(m=>m.inc+m.out));
-  // 成员
-  const memStats=STAT_MEMBERS.map(m=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.member===m){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {m,i,o,bal:i-o}; });
-  // 分类饼图（本月支出）
-  const catMap={}; DB.records.forEach(r=>{ if(r.isTransfer) return; if(r.type==='支出'&&monthKey(r.date)===ym){ catMap[r.category]=(catMap[r.category]||0)+Number(r.amount)||0; } });
+  // 成员（按 src 过滤）
+  const memStats=STAT_MEMBERS.map(m=>{ let i=0,o=0; src.forEach(r=>{ if(r.isTransfer) return; if(r.member===m){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {m,i,o,bal:i-o}; });
+  // 分类饼图：筛选时用 src 的所有支出；未筛选时仍按本月支出
+  const catMap={};
+  if(useFilter){
+    src.forEach(r=>{ if(r.isTransfer) return; if(r.type==='支出'){ catMap[r.category]=(catMap[r.category]||0)+(Number(r.amount)||0); } });
+  } else {
+    src.forEach(r=>{ if(r.isTransfer) return; if(r.type==='支出'&&monthKey(r.date)===ym){ catMap[r.category]=(catMap[r.category]||0)+Number(r.amount)||0; } });
+  }
   const catArr=Object.entries(catMap).map(([k,v])=>({k,v})).sort((a,b)=>b.v-a.v);
   const totalCat=catArr.reduce((s,c)=>s+c.v,0);
   const palette=['#b9aedc','#cdbbe6','#a99bdc','#d9d2ea','#9b8fc9','#e0daf0','#8b7fc7','#cabff0','#b3a7d6','#ddd6ee','#7d6fbf','#e6e1f3','#a892d8','#c2b3e8'];
   let acc=0, grads=[];
   catArr.forEach((c,idx)=>{ const pct=totalCat? (c.v/totalCat*100):0; grads.push(`${palette[idx%palette.length]} ${acc.toFixed(2)}% ${(acc+pct).toFixed(2)}%`); acc+=pct; });
   const pieStyle = catArr.length? `background:conic-gradient(${grads.join(',')})` : 'background:rgba(255,255,255,.1)';
-  const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : '<span class="muted">本月暂无支出</span>';
+  const legend = catArr.length? catArr.map((c,idx)=>`<span><i style="background:${palette[idx%palette.length]}"></i>${esc(c.k)} ${fmtRM(c.v)}</span>`).join('') : `<span class="muted">${useFilter?'当前筛选条件下暂无支出':'本月暂无支出'}</span>`;
 
-  // 账户现金流：各账户收入/支出（不含内部调拨）+ 当前余额（含调拨）；小资贷款显示剩余待还本金
+  // 账户现金流（按 src 过滤）
   const payLaterDebts=getPayLaterDebts();
   const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
   const payLaterUsed=payLaterDebts.reduce((s,d)=>s+(debtStats(d).used||0),0);
   const payLaterAvail=payLaterDebts.reduce((s,d)=>s+(debtStats(d).available||0),0);
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const acctBal=computeAccountBalances();
-  const pmStat=visibleFundAccounts().map(a=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
+  const pmStat=visibleFundAccounts().map(a=>{ let i=0,o=0; src.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
   pmStat.push({label:plLabel, i:0, o:0, bal:payLaterAvail, paylater:true, sub:'未结清余额 '+fmtRM(payLaterUsed)});
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
   const bars=Object.entries(months).map(([m,v])=>{
@@ -1095,7 +1398,19 @@ function viewStats(){
 
   const memRows=memStats.map(s=>`<tr><td>${esc(s.m)}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
 
-  return `
+  // 顶部时段卡：筛选时折叠为单卡
+  const filterCard = `
+  <div class="card filter-card">
+    <h2>🔍 当前筛选：<b>${esc(filterLabel())}</b> <span class="tag">${src.length} 笔</span> <button class="btn sm" style="float:right" onclick="clearFilter()">清除筛选</button></h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="mini">筛选收入</div><div class="v in">${fmtRM(fInc)}</div></div>
+      <div class="stat"><div class="mini">筛选支出</div><div class="v out">${fmtRM(fOut)}</div></div>
+      <div class="stat"><div class="mini">筛选结余</div><div class="v">${fmtRM(fInc-fOut)}</div></div>
+    </div>
+    <div class="muted" style="margin-top:6px;font-size:11px">仅展示该时间段的记录；下方的分类饼图、成员表、支付方式表已全部按筛选范围重新计算。</div>
+  </div>`;
+
+  const naturalCards = `
   <div class="card">
     <h2>⏱️ 今日收支 <span class="tag">${now}</span></h2>
     <div class="stat-grid">
@@ -1129,18 +1444,21 @@ function viewStats(){
     </div>
     <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-end">${bars}</div>
     <div class="muted" style="margin-top:6px"><span style="color:var(--ok)">■</span> 收入&nbsp;&nbsp;<span style="color:var(--danger)">■</span> 支出</div>
-  </div>
+  </div>`;
+
+  return `
+  ${useFilter ? filterCard : naturalCards}
   <div class="card">
-    <h2>💳 支付方式现金流 <span class="tag">现金 / 银行 / 小资贷款 / 电子钱包</span></h2>
+    <h2>💳 支付方式现金流 <span class="tag">${useFilter?('筛选范围 · '+filterLabel()):'现金 / 银行 / 小资贷款 / 电子钱包'}</span></h2>
     <table><thead><tr><th>方式</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${pmRows}</tbody></table>
-    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；GX Bank 单独成栏电子钱包（类似支付宝/微信，需 top up）；微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等每个电子钱包支付方式各自成栏，仅当有余额或发生过收支时才显示；"其他" / 未知电子钱包 并入「电子钱包」锚点；Ryt Bank 与 GX Bank 同样单独成栏电子钱包（常用）；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减）</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">现金 = 现金；银行 = RHB Bank（唯一正规银行，GX Bank 属电子钱包、不计入此行，银行流水与电子钱包分离）；GX Bank 单独成栏电子钱包（类似支付宝/微信，需 top up）；微信 / 支付宝 / Tng / Boost / Grab / Shopee Pay 等每个电子钱包支付方式各自成栏，仅当有余额或发生过收支时才显示；"其他" / 未知电子钱包 并入「电子钱包」锚点；Ryt Bank 与 GX Bank 同样单独成栏电子钱包（常用）；小资贷款 = 任意名称带 PayLater 的债务合计（结余列显示「剩余待还本金」= 额度−已还，随关联还款递减）${useFilter?'<br><b>当前为筛选范围内的现金流</b>。':''}</div>
   </div>
   <div class="card">
-    <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人</span></h2>
+    <h2>👨‍👩‍👧 成员收支 <span class="tag">${STAT_MEMBERS.length} 人${useFilter?' · '+filterLabel():''}</span></h2>
     <table><thead><tr><th>成员</th><th>收入</th><th>支出</th><th>结余</th></tr></thead><tbody>${memRows}</tbody></table>
   </div>
   <div class="card">
-    <h2>🥧 消费分类占比（本月支出）</h2>
+    <h2>🥧 消费分类占比 ${useFilter?'<span class="tag">'+esc(filterLabel())+' · 支出</span>':'<span class="tag">本月支出</span>'}</h2>
     <div class="pie" style="${pieStyle}"></div>
     <div class="legend">${legend}</div>
   </div>`;
