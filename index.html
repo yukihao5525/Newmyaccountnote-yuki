@@ -484,17 +484,37 @@ function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;
 /* ============ 债务计算 ============ */
 function debtStats(d){
   const linked=DB.records.filter(r=>r.linkedDebtId===d.id && r.type==='支出');
-  const autoPaidPrincipal=linked.filter(r=>r.category!=='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 分类为【利息】的还款不扣本金
-  const autoPaidInterest =linked.filter(r=>r.category==='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 利息合计
+  const repaidExclInterest=linked.filter(r=>r.category!=='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 关联还款（本金部分，分类选利息不计入）
+  const autoPaidInterest =linked.filter(r=>r.category==='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 利息合计（分类选利息）
   const paidCount=linked.length;
   const total=Number(d.totalAmount)||0;
+  const isPL=isPayLaterDebt(d);
   // 手动覆盖：未填则用自动值
-  const paidPrincipal = (d.paidAmountManual!=null && d.paidAmountManual!=='' && !isNaN(parseFloat(d.paidAmountManual))) ? parseFloat(d.paidAmountManual) : autoPaidPrincipal;
-  const paidPeriods   = (d.paidPeriodsManual!=null && d.paidPeriodsManual!=='' && !isNaN(parseFloat(d.paidPeriodsManual))) ? parseFloat(d.paidPeriodsManual) : paidCount;
-  let remaining = total - paidPrincipal;
-  if(d.remainingManual!=null && d.remainingManual!=='' && !isNaN(parseFloat(d.remainingManual))) remaining = parseFloat(d.remainingManual);
+  const paidPrincipalRaw = (d.paidAmountManual!=null && d.paidAmountManual!=='' && !isNaN(parseFloat(d.paidAmountManual))) ? parseFloat(d.paidAmountManual) : repaidExclInterest;
+  let used, available=null, interestFromExcess=0, repaidPrincipal=paidPrincipalRaw;
+  if(isPL){
+    // 循环信用（小资贷款）：固定本金(额度) total 不减少；已用 = 用 Ryt PayLater 支付的支出 − 已还本金；可用额度 = 额度 − 已用
+    const spent = DB.records.filter(r=>r.type==='支出' && !r.isTransfer && !r.linkedDebtId && /PayLater/i.test(r.payMethod||'')).reduce((s,r)=>s+(Number(r.amount)||0),0);
+    repaidPrincipal = Math.min(paidPrincipalRaw, total);   // 本金还款封顶为额度
+    interestFromExcess = Math.max(0, paidPrincipalRaw - total); // 还款超过本金(额度)的部分视为利息
+    used = spent - repaidPrincipal;
+    if(d.remainingManual!=null && d.remainingManual!=='' && !isNaN(parseFloat(d.remainingManual))) used = parseFloat(d.remainingManual);
+    used = Math.max(0, used);
+    available = total - used;
+    if(d.availableManual!=null && d.availableManual!=='' && !isNaN(parseFloat(d.availableManual))) available = parseFloat(d.availableManual);
+    available = Math.max(0, Math.min(total, available));
+  } else {
+    used = total - paidPrincipalRaw;
+  }
+  used = Math.max(0, used);
+  let remaining = used; // 通用「剩余」：非PayLater=剩余本金；PayLater=已用(未还款)
+  if(!isPL && d.remainingManual!=null && d.remainingManual!=='' && !isNaN(parseFloat(d.remainingManual))) remaining = parseFloat(d.remainingManual);
+  remaining = Math.max(0, remaining);
+  const paidPeriods = (d.paidPeriodsManual!=null && d.paidPeriodsManual!=='' && !isNaN(parseFloat(d.paidPeriodsManual))) ? parseFloat(d.paidPeriodsManual) : paidCount;
   let remainingPeriods = (d.installments && d.installments>0) ? Math.max(0, d.installments - paidPeriods) : null;
-  return {paidPrincipal, paidPeriods, remaining:Math.max(0,remaining), remainingPeriods, linkedCount:paidCount, autoPaidPrincipal, autoPaidInterest};
+  return {paidPrincipal:repaidPrincipal, paidPeriods, remaining, remainingPeriods, linkedCount:paidCount,
+          autoPaidPrincipal:repaidExclInterest, autoPaidInterest, used, available, isPayLater:isPL,
+          interestFromExcess, totalInterest:autoPaidInterest+interestFromExcess};
 }
 
 /* ============ 渲染：导航 ============ */
@@ -559,10 +579,11 @@ function viewOverview(){
   const acctBal=computeAccountBalances();
   const payLaterDebts=getPayLaterDebts();
   const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
-  const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
+  const payLaterUsed=payLaterDebts.reduce((s,d)=>s+(debtStats(d).used||0),0);
+  const payLaterAvail=payLaterDebts.reduce((s,d)=>s+(debtStats(d).available||0),0);
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const fundCards=visibleFundAccounts().map(a=>({label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, v:acctBal[a.id]||0}));
-  fundCards.push({label:plLabel, v:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)+' · 可用 '+fmtRM(Math.max(0,payLaterLimit-payLaterRemain))});
+  fundCards.push({label:plLabel, v:payLaterAvail, paylater:true, sub:'未结清余额 '+fmtRM(payLaterUsed)});
   const debtRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   const recent = DB.records.slice(0,5);
   const weekRange = mon + ' ~ ' + (()=>{ const dt=parseDate(mon); dt.setDate(dt.getDate()+6); return fmtDate(dt); })();
@@ -579,7 +600,7 @@ function viewOverview(){
     <div class="stat-grid-2">
       ${fundCards.map(s=>`<div class="stat"><div class="mini">${s.label}</div><div class="v" style="color:${s.paylater?'var(--danger)':(s.v<0?'var(--danger)':'var(--ok)')}">${fmtRM(s.v)}</div>${s.sub?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${s.sub}</div>`:''}</div>`).join('')}
     </div>
-    <div class="muted" style="margin-top:8px;font-size:11px">各账户实时余额：由记账流水自动汇总（收入加、支出减），内部调拨只在一进一出间转移、不计入收支总额；小资贷款=任意名称带 PayLater 的债务合计「剩余待还本金」= 额度−已还（随关联还款递减）。可在「选项库 → 账户管理」增删账户。</div>
+    <div class="muted" style="margin-top:8px;font-size:11px">各账户实时余额：由记账流水自动汇总（收入加、支出减），内部调拨只在一进一出间转移、不计入收支总额；小资贷款(Ryt PayLater)为循环信用：固定本金(额度)不变，用 Ryt PayLater 支付→增加已用、扣可用额度，还款→加已还、加可用额度，还款超过本金部分计为利息。可在「选项库 → 账户管理」增删账户。</div>
   </div>
   <div class="card">
     <h2>⏱️ 今日收支概览 <span class="tag">${now}</span></h2>
@@ -855,11 +876,12 @@ function debtCardHTML(d){
   const statusPill = done?'<span class="pill ok">已结清</span>': (d.status==='待结清'?'<span class="pill danger">'+esc(d.status)+'</span>':'<span class="pill">'+esc(d.status)+'</span>');
   const hasPaidOverride = (d.paidAmountManual!=null && d.paidAmountManual!=='');
   const hasPeriodOverride = (d.paidPeriodsManual!=null && d.paidPeriodsManual!=='');
+  const hasAvailOverride = (d.availableManual!=null && d.availableManual!=='');
   const linkBadge = isPayLaterDebt(d)? '<span class="pill" style="background:rgba(123,97,255,.25);color:#cbbcff;border:1px solid #7b61ff">🔗 联动·小资贷款</span>' : '';
   return `<div class="debt-card ${done?'done':''}" data-id="${d.id}">
     <div class="debt-title"><b>${esc(d.name)}</b> ${statusPill} ${linkBadge}</div>
     <div class="debt-fields">
-      <label><span class="mini">总金额(RM)</span><div class="rm-input"><input type="number" step="0.01" value="${d.totalAmount}" onchange="updDebt('${d.id}','totalAmount',this.value)"></div></label>
+      <label><span class="mini">${isPayLaterDebt(d)?'固定本金/额度(RM)':'总金额(RM)'}</span><div class="rm-input"><input type="number" step="0.01" value="${d.totalAmount}" onchange="updDebt('${d.id}','totalAmount',this.value)"></div></label>
       <label><span class="mini">分期期数（无分期填0）</span><input type="number" value="${d.installments==null?'':d.installments}" onchange="updDebt('${d.id}','installments',this.value)"></label>
       <label><span class="mini">每月月供(RM)</span><div class="rm-input"><input type="number" step="0.01" value="${d.monthlyPayment}" onchange="updDebt('${d.id}','monthlyPayment',this.value)"></div></label>
       <label><span class="mini">起始日期</span><input type="date" value="${d.startDate||''}" onchange="updDebt('${d.id}','startDate',this.value)"></label>
@@ -879,22 +901,23 @@ function debtCardHTML(d){
         <span class="lb">✅ 已还款金额（本金）</span>
         <div class="vv in">${fmtRM(s.paidPrincipal)}</div>
         <input type="number" step="0.01" placeholder="留空=按关联还款自动" value="${hasPaidOverride?d.paidAmountManual:''}" onchange="updDebt('${d.id}','paidAmountManual',this.value)">
-        <span class="manual-hint">${hasPaidOverride?'已手动覆盖':'自动：'+fmtRM(s.autoPaidPrincipal)+'（'+s.linkedCount+'笔）'}</span>
+        <span class="manual-hint">${hasPaidOverride?'已手动覆盖':'自动：'+fmtRM(s.autoPaidPrincipal)+'（'+s.linkedCount+'笔）'}${isPayLaterDebt(d)?'；超过本金 '+fmtRM(d.totalAmount||0)+' 部分计为利息':''}</span>
       </div>
       <div class="pi">
         <span class="lb">💸 已付利息</span>
-        <div class="vv">${fmtRM(s.autoPaidInterest)}</div>
-        <span class="manual-hint">分类选【利息】的还款（不扣本金）</span>
+        <div class="vv">${fmtRM(s.totalInterest)}</div>
+        <span class="manual-hint">分类选【利息】的还款 + 还款超本金部分${isPayLaterDebt(d)?'（'+fmtRM(s.interestFromExcess)+'）':''}</span>
       </div>
       <div class="pi">
-        <span class="lb">📌 剩余本金</span>
-        <div class="vv" style="color:${done?'var(--ok)':'var(--danger)'}">${fmtRM(s.remaining)}</div>
-        <span class="manual-hint">= 总金额 ${fmtRM(d.totalAmount||0)} − 已还</span>
+        <span class="lb">${isPayLaterDebt(d)?'📌 已用（未还款）':'📌 剩余本金'}</span>
+        <div class="vv" style="color:${done?'var(--ok)':'var(--danger)'}">${fmtRM(isPayLaterDebt(d)?s.used:s.remaining)}</div>
+        <span class="manual-hint">${isPayLaterDebt(d)?('= 用 Ryt PayLater 支付 − 已还本金'):('= 总金额 '+fmtRM(d.totalAmount||0)+' − 已还')}</span>
       </div>
       ${isPayLaterDebt(d)?`<div class="pi">
-        <span class="lb">💳 可用额度</span>
-        <div class="vv" style="color:var(--ok)">${fmtRM(Math.max(0,(Number(d.totalAmount)||0)-s.remaining))}</div>
-        <span class="manual-hint">= 额度 ${fmtRM(d.totalAmount||0)} − 剩余待还 ${fmtRM(s.remaining)}</span>
+        <span class="lb">💳 可用额度（循环信用）</span>
+        <div class="vv" style="color:var(--ok)">${fmtRM(s.available)}</div>
+        <input type="number" step="0.01" placeholder="留空=按 额度−已用 自动" value="${d.availableManual!=null&&d.availableManual!==''?d.availableManual:''}" onchange="updDebt('${d.id}','availableManual',this.value)">
+        <span class="manual-hint">= 额度 ${fmtRM(d.totalAmount||0)} − 已用 ${fmtRM(s.used)}</span>
       </div>`:''}
       <div class="pi">
         <span class="lb">🔁 已还款期数</span>
@@ -909,7 +932,7 @@ function debtCardHTML(d){
       </div>
     </div>
     <div class="btn-row">
-      ${(hasPaidOverride||hasPeriodOverride)?'<button class="btn sm ghost" onclick="clearDebtOverride(\''+d.id+'\')">恢复自动核算</button>':''}
+      ${(hasPaidOverride||hasPeriodOverride||hasAvailOverride)?'<button class="btn sm ghost" onclick="clearDebtOverride(\''+d.id+'\')">恢复自动核算</button>':''}
       <button class="btn sm danger" onclick="delDebt('${d.id}')">删除债务</button>
     </div>
   </div>`;
@@ -920,12 +943,12 @@ function viewDebt(){
   const totalRemain = DB.debts.filter(d=>d.status!=='已结清').reduce((s,d)=>s+debtStats(d).remaining,0);
   return `
   <div class="card">
-    <h2>💳 个人债务台账 <span class="tag">未结清剩余本金 ${fmtRM(totalRemain)}</span></h2>
+    <h2>💳 个人债务台账 <span class="tag">未结清合计 ${fmtRM(totalRemain)}</span></h2>
     <div class="seg" style="margin-bottom:10px">
       <button class="${debtViewMode==='all'?'on':''}" onclick="debtViewMode='all';render()">全部</button>
       <button class="${debtViewMode==='active'?'on':''}" onclick="debtViewMode='active';render()">仅未结清</button>
     </div>
-    <div class="hint">💡 在「记账」录入还款时选择 <b>关联债务</b>，保存后自动扣减对应本金、累计期数。结清后把状态改为「已结清」即停止计入负债。</div>
+    <div class="hint">💡 <b>小资贷款(Ryt PayLater)</b>为循环信用：固定本金(额度)不变；用 Ryt PayLater 支付→增已用、扣可用额度；还款选<b>关联债务</b>→加已还、加可用额度，超过本金部分计利息。结清后改「已结清」即停止计入负债。</div>
     <div id="debtList"></div>
     <h2 style="margin-top:14px">➕ 新增其他债务</h2>
     <label class="fld"><span class="lb">债务设备/名称</span><input id="nd_name" placeholder="如：空调分期"></label>
@@ -959,6 +982,7 @@ function updDebt(id,field,val){
   if(field==='totalAmount'||field==='monthlyPayment') d[field]=parseFloat(val)||0;
   else if(field==='installments'){ const v=parseFloat(val); d.installments = (v==null||isNaN(v)||v<=0)?0:v; }
   else if(field==='paidAmountManual'){ if(val===''||val==null) delete d.paidAmountManual; else d.paidAmountManual=parseFloat(val)||0; }
+  else if(field==='availableManual'){ if(val===''||val==null) delete d.availableManual; else d.availableManual=parseFloat(val)||0; }
   else if(field==='paidPeriodsManual'){ if(val===''||val==null) delete d.paidPeriodsManual; else d.paidPeriodsManual=parseInt(val)||0; }
   else d[field]=val;
   autoSave();
@@ -967,7 +991,7 @@ function updDebt(id,field,val){
 }
 function clearDebtOverride(id){
   const d=DB.debts.find(x=>x.id===id); if(!d) return;
-  delete d.paidAmountManual; delete d.paidPeriodsManual; delete d.remainingManual;
+  delete d.paidAmountManual; delete d.paidPeriodsManual; delete d.remainingManual; delete d.availableManual;
   autoSave();
   if(curModule==='debt') renderDebtList();
   else renderDebtInto('debtInDetail');
@@ -1038,11 +1062,12 @@ function viewStats(){
   // 账户现金流：各账户收入/支出（不含内部调拨）+ 当前余额（含调拨）；小资贷款显示剩余待还本金
   const payLaterDebts=getPayLaterDebts();
   const payLaterLimit=payLaterDebts.reduce((s,d)=>s+(Number(d.totalAmount)||0),0);
-  const payLaterRemain=payLaterDebts.reduce((s,d)=>s+debtStats(d).remaining,0);
+  const payLaterUsed=payLaterDebts.reduce((s,d)=>s+(debtStats(d).used||0),0);
+  const payLaterAvail=payLaterDebts.reduce((s,d)=>s+(debtStats(d).available||0),0);
   const plLabel = payLaterDebts.length ? (payLaterDebts.length===1 ? '📑 小资贷款 ('+payLaterDebts[0].name+')' : '📑 小资贷款 (PayLater×'+payLaterDebts.length+')') : '📑 小资贷款 (PayLater)';
   const acctBal=computeAccountBalances();
   const pmStat=visibleFundAccounts().map(a=>{ let i=0,o=0; DB.records.forEach(r=>{ if(r.isTransfer) return; if(accountForPayMethod(r.payMethod)===a.id){ if(r.type==='收入') i+=Number(r.amount)||0; else o+=Number(r.amount)||0; } }); return {label:(a.type==='cash'?'💵 ':(a.type==='bank'?'🏦 ':'📱 '))+a.name, i, o, bal:acctBal[a.id]||0}; });
-  pmStat.push({label:plLabel, i:0, o:0, bal:payLaterRemain, paylater:true, sub:'额度 '+fmtRM(payLaterLimit)+' · 可用 '+fmtRM(Math.max(0,payLaterLimit-payLaterRemain))});
+  pmStat.push({label:plLabel, i:0, o:0, bal:payLaterAvail, paylater:true, sub:'未结清余额 '+fmtRM(payLaterUsed)});
   const pmRows=pmStat.map(s=>`<tr><td>${s.label}</td><td class="amt"><span class="rm" style="color:var(--ok)">${fmtRM(s.i)}</span></td><td class="amt"><span class="rm" style="color:var(--danger)">${fmtRM(s.o)}</span></td><td class="amt">${fmtRM(s.bal)}</td></tr>`).join('');
   const bars=Object.entries(months).map(([m,v])=>{
     const tot=v.inc+v.out; const h=(tot/maxM*100);
