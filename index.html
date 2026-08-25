@@ -484,17 +484,21 @@ function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;
 /* ============ 债务计算 ============ */
 function debtStats(d){
   const linked=DB.records.filter(r=>r.linkedDebtId===d.id && r.type==='支出');
-  const repaidExclInterest=linked.filter(r=>r.category!=='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 关联还款（本金部分，分类选利息不计入）
-  const autoPaidInterest =linked.filter(r=>r.category==='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 利息合计（分类选利息）
-  const paidCount=linked.length;
-  const total=Number(d.totalAmount)||0;
   const isPL=isPayLaterDebt(d);
+  // 已还本金（自动统计）：小资贷款仅认「还款」分类；普通债务认除「利息」外任意分类（车贷/还款等）
+  const repaidExclInterest = isPL
+    ? linked.filter(r=>r.category==='还款').reduce((s,r)=>s+(Number(r.amount)||0),0)
+    : linked.filter(r=>r.category!=='利息').reduce((s,r)=>s+(Number(r.amount)||0),0);
+  const autoPaidInterest =linked.filter(r=>r.category==='利息').reduce((s,r)=>s+(Number(r.amount)||0),0); // 利息合计（分类选利息）
+  const paidCount = isPL ? linked.filter(r=>r.category==='还款'||r.category==='利息').length : linked.length;
+  const total=Number(d.totalAmount)||0;
   // 手动覆盖：未填则用自动值
   const paidPrincipalRaw = (d.paidAmountManual!=null && d.paidAmountManual!=='' && !isNaN(parseFloat(d.paidAmountManual))) ? parseFloat(d.paidAmountManual) : repaidExclInterest;
   let used, available=null, interestFromExcess=0, repaidPrincipal=paidPrincipalRaw;
   if(isPL){
-    // 循环信用（小资贷款）：固定本金(额度) total 不减少；已用 = 用 Ryt PayLater 支付的支出 − 已还本金；可用额度 = 额度 − 已用
-    const spent = DB.records.filter(r=>r.type==='支出' && !r.isTransfer && !r.linkedDebtId && /PayLater/i.test(r.payMethod||'')).reduce((s,r)=>s+(Number(r.amount)||0),0);
+    // 循环信用（小资贷款）：固定本金(额度) total 不减少；已用 = 用 Ryt PayLater 支付的「消费」 − 已还本金；可用额度 = 额度 − 已用
+    // 关键：只有「消费分类=还款/利息」才视作还款/付息；其余用 Ryt PayLater 支付的消费一律计入已用(扣可用额度)，不论是否关联债务
+    const spent = DB.records.filter(r=>r.type==='支出' && !r.isTransfer && /PayLater/i.test(r.payMethod||'') && r.category!=='还款' && r.category!=='利息').reduce((s,r)=>s+(Number(r.amount)||0),0);
     repaidPrincipal = Math.min(paidPrincipalRaw, total);   // 本金还款封顶为额度
     interestFromExcess = Math.max(0, paidPrincipalRaw - total); // 还款超过本金(额度)的部分视为利息
     used = spent - repaidPrincipal;
@@ -901,7 +905,7 @@ function debtCardHTML(d){
         <span class="lb">✅ 已还款金额（本金）</span>
         <div class="vv in">${fmtRM(s.paidPrincipal)}</div>
         <input type="number" step="0.01" placeholder="留空=按关联还款自动" value="${hasPaidOverride?d.paidAmountManual:''}" onchange="updDebt('${d.id}','paidAmountManual',this.value)">
-        <span class="manual-hint">${hasPaidOverride?'已手动覆盖':'自动：'+fmtRM(s.autoPaidPrincipal)+'（'+s.linkedCount+'笔）'}${isPayLaterDebt(d)?'；超过本金 '+fmtRM(d.totalAmount||0)+' 部分计为利息':''}</span>
+        <span class="manual-hint">${hasPaidOverride?'已手动覆盖':'自动：'+fmtRM(s.autoPaidPrincipal)+'（'+s.linkedCount+'笔）'}${isPayLaterDebt(d)?'；仅「还款」分类计入还款，其余消费只扣可用额度；超过本金 '+fmtRM(d.totalAmount||0)+' 部分计为利息':''}</span>
       </div>
       <div class="pi">
         <span class="lb">💸 已付利息</span>
@@ -911,7 +915,7 @@ function debtCardHTML(d){
       <div class="pi">
         <span class="lb">${isPayLaterDebt(d)?'📌 已用（未还款）':'📌 剩余本金'}</span>
         <div class="vv" style="color:${done?'var(--ok)':'var(--danger)'}">${fmtRM(isPayLaterDebt(d)?s.used:s.remaining)}</div>
-        <span class="manual-hint">${isPayLaterDebt(d)?('= 用 Ryt PayLater 支付 − 已还本金'):('= 总金额 '+fmtRM(d.totalAmount||0)+' − 已还')}</span>
+        <span class="manual-hint">${isPayLaterDebt(d)?('= 用 Ryt PayLater 支付的消费 − 已还(仅「还款」分类)'):('= 总金额 '+fmtRM(d.totalAmount||0)+' − 已还')}</span>
       </div>
       ${isPayLaterDebt(d)?`<div class="pi">
         <span class="lb">💳 可用额度（循环信用）</span>
@@ -948,7 +952,7 @@ function viewDebt(){
       <button class="${debtViewMode==='all'?'on':''}" onclick="debtViewMode='all';render()">全部</button>
       <button class="${debtViewMode==='active'?'on':''}" onclick="debtViewMode='active';render()">仅未结清</button>
     </div>
-    <div class="hint">💡 <b>小资贷款(Ryt PayLater)</b>为循环信用：固定本金(额度)不变；用 Ryt PayLater 支付→增已用、扣可用额度；还款选<b>关联债务</b>→加已还、加可用额度，超过本金部分计利息。结清后改「已结清」即停止计入负债。</div>
+    <div class="hint">💡 <b>小资贷款(Ryt PayLater)</b>为循环信用：固定本金(额度)不变；用 Ryt PayLater 支付（消费分类非「还款/利息」）→增已用、扣可用额度；还款选<b>关联债务</b>且分类选<b>【还款】</b>→加已还、加可用额度，超过本金部分计利息。结清后改「已结清」即停止计入负债。</div>
     <div id="debtList"></div>
     <h2 style="margin-top:14px">➕ 新增其他债务</h2>
     <label class="fld"><span class="lb">债务设备/名称</span><input id="nd_name" placeholder="如：空调分期"></label>
