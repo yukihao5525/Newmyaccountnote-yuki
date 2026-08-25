@@ -7,3 +7,5 @@ avatar_upload.js
 upload_avatar_a.js
 extract_script.js
 pl_harness.js
+generate_icons.py
+assets_upload.js
