@@ -1114,7 +1114,18 @@ function viewDetail(){
   const fEndVal = (recordFilter.end||'');
   return `
   <div class="card">
+    <h2>📑 完整记账录入明细表 <span class="tag">${fActive?('已筛 '+rows.length+' / 共 '+DB.records.length+' 笔'):('共 '+rows.length+' 笔')}</span></h2>
+    <div class="muted" style="margin-bottom:8px">${fActive?'⚠️ 当前仅展示筛选范围内的记录（默认按日期倒序，最新置顶）。要查看全部请滚动到下方【筛选 & 导出】点【全部】或【清除】。':'字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜物品｜支付方式｜交易类型｜成员｜借款人/还给谁｜转账人/转账给谁｜备注｜关联债务'}</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>日期/成员</th><th>类型/分类</th><th>金额</th><th>地点/单号/物品</th><th>操作</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>
+    <button class="btn primary" style="margin-top:12px" onclick="go('quick')">➕ 新增一笔</button>
+  </div>
+  <div id="debtInDetail"></div>
+  <div class="card">
     <h2>🔍 筛选 & 导出 <span class="tag">${fActive?('已筛选 · '+filterLabel()):'全部记录'}</span></h2>
+    <div class="muted" style="margin-bottom:10px">💡 调整下方筛选条件后，明细表 + 概览/统计页的 KPI 与图表会全部按新范围重算。导出范围可选「当前筛选」或「全部记录」。</div>
     <div class="filter-bar">
       <div class="filter-row">
         ${fBtn('今天','today')}
@@ -1151,17 +1162,7 @@ function viewDetail(){
         ${sum.trf?`<span class="sep">·</span>内部调拨 <span class="muted">${fmtRM(sum.trf)}</span>`:''}
       </div>
     </div>
-  </div>
-  <div class="card">
-    <h2>📑 完整记账录入明细表 <span class="tag">${fActive?('已筛 '+rows.length+' / 共 '+DB.records.length+' 笔'):('共 '+rows.length+' 笔')}</span></h2>
-    <div class="muted" style="margin-bottom:8px">${fActive?'⚠️ 当前仅展示筛选范围内的记录（默认按日期倒序，最新置顶）。要查看全部请点【全部】或【清除】。':'字段：日期｜收支类型｜金额｜消费分类｜地点｜单号｜物品｜支付方式｜交易类型｜成员｜借款人/还给谁｜转账人/转账给谁｜备注｜关联债务'}</div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>日期/成员</th><th>类型/分类</th><th>金额</th><th>地点/单号/物品</th><th>操作</th></tr></thead>
-      <tbody>${body}</tbody>
-    </table></div>
-    <button class="btn primary" style="margin-top:12px" onclick="go('quick')">➕ 新增一笔</button>
-  </div>
-  <div id="debtInDetail"></div>`;
+  </div>`;
 }
 function bindDetail(){ renderDebtInto('debtInDetail'); }
 function editRecord(id){ editingId=id; go('quick'); }
