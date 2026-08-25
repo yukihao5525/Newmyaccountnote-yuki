@@ -251,6 +251,7 @@ const OPTIONS = {
   payMethods:['微信','现金','支付宝','Tng Ewallet','Ryt Bank','Ryt PayLater','RHB Bank','GX Bank','Boost','Grab Pay','Shopee Pay','其他'],
   txnTypes:['CASH','DUITNOW TRANSFER','QR SCAN TRANSFER']
 };
+const APP_VERSION='2026-08-25.3'; // 部署版本戳（手机端排查缓存用）
 const STAT_MEMBERS=['我']; // 统计·成员收支仅保留本人（其他成员仍可在记账时选「谁用了/谁给了钱」）
 const STORE_KEY='mobileWorkbenchDB_v1';
 
@@ -652,7 +653,7 @@ function viewOverview(){
       <button class="btn primary" onclick="go('quick')">⚡ 记一笔</button>
       <button class="btn" onclick="go('debt')">💳 看债务进度</button>
     </div>
-    <div class="muted" style="margin-top:10px;font-size:11px">数据保存在本机浏览器（localStorage），不会上传。清空缓存将丢失记录。</div>
+    <div class="muted" style="margin-top:10px;font-size:11px">数据保存在本机浏览器（localStorage），不会上传。清空缓存将丢失记录。<br>版本 <b>v${APP_VERSION}</b>（若与此不符说明手机端仍是旧缓存，请彻底刷新/清站点数据）</div>
   </div>`;
 }
 
